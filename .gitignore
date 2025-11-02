@@ -1,13 +1,12 @@
 /vendor/
 /node_modules/
-/public/storage
-/storage/*.key
 /storage/framework/cache/
 /storage/framework/sessions/
 /storage/framework/views/
+/storage/logs/
 /.env
-/.env.backup
-/.env.production
+/.env.*
+!.env.example
 .phpunit.result.cache
 Homestead.json
 Homestead.yaml
@@ -19,4 +18,7 @@ yarn-error.log
 .DS_Store
 Thumbs.db
 /composer.phar
-/.php-cs-fixer.cache
+/other file/
+/1
+/30
+/lastUpdateId
