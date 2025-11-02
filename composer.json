@@ -1,0 +1,17 @@
+{
+    "name": "yourname/dating-bot",
+    "description": "Telegram Dating Bot",
+    "type": "project",
+    "require": {
+        "illuminate/database": "^8.0",
+        "vlucas/phpdotenv": "^5.0",
+        "guzzlehttp/guzzle": "^7.0",
+        "telegram-bot/api": "^2.5",
+        "nesbot/carbon": "^2.73"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    }
+}
