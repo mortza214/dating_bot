@@ -33,7 +33,9 @@ class User extends Model
         // فیلدهای جدید نام و نام خانوادگی:
         'first_name_display',
         'health_status',
-        'mobile'
+        'mobile',
+         'profile_photo',
+        'profile_photos'
 
 
     ];

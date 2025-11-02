@@ -130,7 +130,7 @@ class BotCore
                 $this->handleStartWithReferral($text, $dbUser, $chatId);
                 return;
             }
-           
+
 
             if (strpos($dbUser->state, 'editing_') === 0 || $dbUser->state === 'entering_charge_code') {
                 $this->handleProfileState($text, $dbUser, $chatId);
@@ -151,7 +151,7 @@ class BotCore
             $this->processCallbackQuery($update['callback_query']);
         }
 
-        
+
 
     }
 
@@ -166,7 +166,7 @@ class BotCore
                 'state' => 'start'
             ]
         );
-       
+
         return $user;
     }
 
@@ -582,6 +582,14 @@ class BotCore
             case 'fix_gender_data':
                 $this->fixGenderFilterLogic($user, $chatId);
                 break;
+            case 'manage_photos':
+                $this->showPhotoManagementMenu($user);
+                break;
+
+
+            case 'selecting_main_photo':
+                return $this->handleMainPhotoSelection($user, $chatId);
+                
 
 
         }
@@ -821,17 +829,26 @@ class BotCore
     }
 
     private function getPDO()
-    {
+{
+    static $pdo = null;
+    if ($pdo === null) {
         $host = 'localhost';
         $dbname = 'dating_system';
         $username = 'root';
         $password = '';
-
-        $pdo = new \PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password);
-        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-
-        return $pdo;
+        
+        try {
+            // استفاده از \PDO برای کلاس global
+            $pdo = new \PDO("mysql:host=$host;dbname=$dbname", $username, $password);
+            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            echo "✅ PDO connection established\n";
+        } catch (\PDOException $e) {
+            echo "❌ PDO connection failed: " . $e->getMessage() . "\n";
+            throw $e;
+        }
     }
+    return $pdo;
+}
 
     private function addFieldToUsersTable($field)
     {
@@ -1347,20 +1364,17 @@ class BotCore
     }
     private function showProfile($user, $chatId)
     {
-        
-
         $message = "👤 **پروفایل کاربری**\n\n";
         $message .= "🆔 شناسه: " . $user->telegram_id . "\n";
         $message .= "👤 نام: " . ($user->first_name ?? 'تعیین نشده') . "\n";
         $message .= "📧 یوزرنیم: @" . ($user->username ?? 'ندارد') . "\n";
 
         // نمایش فیلدهای پروفایل به صورت دینامیک
-        // 🔴 اصلاح: استفاده از getActiveFields به جای where
         $activeFields = ProfileField::getActiveFields();
         foreach ($activeFields as $field) {
             $value = $user->{$field->field_name} ?? 'تعیین نشده';
 
-            // 🔴 اصلاح: تبدیل جنسیت به فارسی برای نمایش
+            // تبدیل جنسیت به فارسی برای نمایش
             if ($field->field_name === 'gender') {
                 $value = $this->convertGenderForDisplay($value);
             }
@@ -1378,12 +1392,27 @@ class BotCore
             'inline_keyboard' => [
                 [
                     ['text' => '✏️ ویرایش پروفایل', 'callback_data' => 'profile_edit_start'],
+                    ['text' => '📷 مدیریت عکس‌ها', 'callback_data' => 'manage_photos'],
                     ['text' => '🔙 بازگشت', 'callback_data' => 'back_to_profile']
                 ]
             ]
         ];
 
-        $this->telegram->sendMessage($chatId, $message, $keyboard);
+        // اگر کاربر عکس پروفایل دارد، عکس را به همراه متن ارسال کن
+        if (!empty($user->profile_photo)) {
+            $photoUrl = $this->getProfilePhotoUrl($user->profile_photo);
+            $this->telegram->sendPhoto($chatId, $photoUrl, $message, $keyboard);
+        } else {
+            $this->telegram->sendMessage($chatId, $message, $keyboard);
+        }
+    }
+
+    // متد کمکی برای گرفتن آدرس کامل عکس پروفایل
+    private function getProfilePhotoUrl($photoFilename)
+    {
+        // آدرس دامنه خود را اینجا قرار دهید
+        $baseUrl = "http://localhost/dating_bot/storage/profile_photos/";
+        return $baseUrl . $photoFilename;
     }
 
     // ==================== پردازش state‌ها ====================
@@ -3545,58 +3574,58 @@ class BotCore
 
         return $opposites[$gender] ?? 'زن'; // مقدار پیشفرض
     }
-private function showSuggestion($user, $chatId, $suggestedUser)
-{
-    $cost = $this->getContactRequestCost();
+    private function showSuggestion($user, $chatId, $suggestedUser)
+    {
+        $cost = $this->getContactRequestCost();
 
-    
-    $message = "📋 **مشخصات:**\n\n";
 
-    // نمایش فیلدهای عمومی پروفایل
-    $activeFields = ProfileField::getActiveFields();
-    $displayedFieldsCount = 0;
+        $message = "📋 **مشخصات:**\n\n";
 
-    foreach ($activeFields as $field) {
-        // چک کردن وضعیت نمایش فیلد
-        if ($this->shouldDisplayField($user, $field)) {
-            $value = $suggestedUser->{$field->field_name} ?? 'تعیین نشده';
+        // نمایش فیلدهای عمومی پروفایل
+        $activeFields = ProfileField::getActiveFields();
+        $displayedFieldsCount = 0;
 
-            // 🔴 اصلاح: تبدیل جنسیت به فارسی برای نمایش
-            if ($field->field_name === 'gender') {
-                $value = $this->convertGenderForDisplay($value);
-            } elseif ($field->field_type === 'select' && is_numeric($value)) {
-                $value = $this->convertSelectValueToText($field, $value);
+        foreach ($activeFields as $field) {
+            // چک کردن وضعیت نمایش فیلد
+            if ($this->shouldDisplayField($user, $field)) {
+                $value = $suggestedUser->{$field->field_name} ?? 'تعیین نشده';
+
+                // 🔴 اصلاح: تبدیل جنسیت به فارسی برای نمایش
+                if ($field->field_name === 'gender') {
+                    $value = $this->convertGenderForDisplay($value);
+                } elseif ($field->field_type === 'select' && is_numeric($value)) {
+                    $value = $this->convertSelectValueToText($field, $value);
+                }
+
+                $message .= "✅ {$field->field_label} : {$value}\n";
+                $displayedFieldsCount++;
             }
-
-            $message .= "✅ {$field->field_label} : {$value}\n";
-            $displayedFieldsCount++;
         }
-    }
 
-    // اگر هیچ فیلدی نمایش داده نشد
-    if ($displayedFieldsCount === 0) {
-        $message .= "👀 اطلاعات بیشتری برای نمایش موجود نیست.\n";
-        $message .= "💼 برای مشاهده اطلاعات کامل، اشتراک تهیه کنید.\n";
-    }
+        // اگر هیچ فیلدی نمایش داده نشد
+        if ($displayedFieldsCount === 0) {
+            $message .= "👀 اطلاعات بیشتری برای نمایش موجود نیست.\n";
+            $message .= "💼 برای مشاهده اطلاعات کامل، اشتراک تهیه کنید.\n";
+        }
 
-    $shownCount = \App\Models\UserSuggestion::getShownCount($user->id, $suggestedUser->id);
-    $message .= "\n⭐ این فرد {$shownCount} بار برای شما نمایش داده شده است.";
+        $shownCount = \App\Models\UserSuggestion::getShownCount($user->id, $suggestedUser->id);
+        $message .= "\n⭐ این فرد {$shownCount} بار برای شما نمایش داده شده است.";
 
-    $keyboard = [
-        'inline_keyboard' => [
-            [
-                ['text' => '📞 درخواست اطلاعات تماس', 'callback_data' => "request_contact:{$suggestedUser->id}"],
-                ['text' => '💌 پیشنهاد بعدی', 'callback_data' => 'get_suggestion']
-            ],
-            [
-                ['text' => '⚙️ تنظیم فیلترها', 'callback_data' => 'edit_filters'],
-                ['text' => '🔙 منوی اصلی', 'callback_data' => 'main_menu']
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => '📞 درخواست اطلاعات تماس', 'callback_data' => "request_contact:{$suggestedUser->id}"],
+                    ['text' => '💌 پیشنهاد بعدی', 'callback_data' => 'get_suggestion']
+                ],
+                [
+                    ['text' => '⚙️ تنظیم فیلترها', 'callback_data' => 'edit_filters'],
+                    ['text' => '🔙 منوی اصلی', 'callback_data' => 'main_menu']
+                ]
             ]
-        ]
-    ];
+        ];
 
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+    }
     // 🔴 متد جدید برای چک کردن نمایش فیلد
     private function shouldDisplayField($user, $field)
     {
@@ -4179,7 +4208,7 @@ private function showSuggestion($user, $chatId, $suggestedUser)
         }
 
         $message = "📞 **اطلاعات تماس کاربر**\n\n";
-       
+
         $message .= "👤 نام: {$suggestedUser->first_name}\n";
 
         // نمایش نام کاربری اگر وجود دارد
@@ -5757,7 +5786,7 @@ private function showSuggestion($user, $chatId, $suggestedUser)
     }
     // انتهای کد موقت 
 
-    
+
     /**
      * 🔴 تبدیل stdClass به User object
      */
@@ -5773,7 +5802,382 @@ private function showSuggestion($user, $chatId, $suggestedUser)
         }
         return $user;
     }
+    // در کلاس BotCore
+    public function handlePhotoMessage($user, $message)
+    {
+        echo "🖼️ Handling photo message...\n";
+
+        if (isset($message['photo'])) {
+            $photo = end($message['photo']); // بزرگترین سایز
+            $botToken = $this->getBotToken();
+
+            echo "📸 Photo details: " . print_r($photo, true) . "\n";
+
+            $profileManager = new ProfileFieldManager();
+
+            // تشخیص state کاربر
+            $isMain = (isset($user->state) && $user->state == 'uploading_main_photo');
+
+            echo "🎯 Upload type: " . ($isMain ? "Main Photo" : "Additional Photo") . "\n";
+
+            if ($profileManager->handlePhotoUpload($user, $photo, $botToken, $isMain)) {
+                $this->sendMessage($user->telegram_id, "✅ عکس با موفقیت آپلود شد!");
+
+                if ($isMain) {
+                    $this->showProfileMenu($user);
+                } else {
+                    $this->askForMorePhotos($user);
+                }
+            } else {
+                $this->sendMessage($user->telegram_id, "❌ خطا در آپلود عکس. لطفاً مجدداً تلاش کنید.");
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private function getBotToken()
+    {
+        // اینجا توکن ربات خود را برگردانید
+        return $_ENV['TELEGRAM_BOT_TOKEN'] ?? '8309595970:AAGaX8wstn-Fby_IzF5cU_a1CxGCPfCEQNk';
+    }
+
+    private function askForMorePhotos($user)
+    {
+        $keyboard = [
+            ['📷 آپلود عکس دیگر'],
+            ['⭐ انتخاب عکس اصلی'],
+            ['↩️ بازگشت به منوی اصلی']
+        ];
+
+        $this->sendMessage(
+            $user->telegram_id,
+            "آیا می‌خواهید عکس دیگری آپلود کنید؟\n\n" .
+            "می‌توانید عکس‌های بیشتری آپلود کنید یا یک عکس را به عنوان اصلی انتخاب کنید.",
+            $keyboard
+        );
+
+        // بروزرسانی state کاربر
+        $this->updateUserState($user->telegram_id, 'managing_photos');
+    }
 
 
 
+
+    private function showProfileMenu($user)
+    {
+        $keyboard = [
+            ['👤 ویرایش نام', '📝 ویرایش بیو'],
+            ['🏙️ ویرایش شهر', '💰 ویرایش درآمد'],
+            ['📅 ویرایش سن'],
+            ['📷 مدیریت عکس‌های پروفایل'],
+            ['🏠 بازگشت به منوی اصلی']
+        ];
+
+        $this->sendMessage($user->telegram_id, "🔧 منوی ویرایش پروفایل:", $keyboard);
+    }
+
+    private function showPhotoManagementMenu($user)
+{
+    // استفاده از $this->getPDO() به جای ایجاد مستقیم PDO
+    $pdo = $this->getPDO();
+    $sql = "SELECT profile_photo, profile_photos FROM users WHERE telegram_id = ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$user->telegram_id]);
+    $userData = $stmt->fetch(\PDO::FETCH_ASSOC); // استفاده از \PDO::FETCH_ASSOC
+    
+    $mainPhoto = $userData['profile_photo'] ?? null;
+    $allPhotos = $userData['profile_photos'] ? json_decode($userData['profile_photos'], true) : [];
+    
+    $message = "📷 مدیریت عکس‌های پروفایل\n\n";
+    $message .= "عکس اصلی: " . ($mainPhoto ? "✅ تنظیم شده" : "❌ تنظیم نشده") . "\n";
+    $message .= "تعداد عکس‌ها: " . (count($allPhotos) + ($mainPhoto ? 1 : 0)) . "\n\n";
+    $message .= "گزینه مورد نظر را انتخاب کنید:";
+    
+    $keyboard = [];
+    
+    if (empty($allPhotos) && !$mainPhoto) {
+        $keyboard[] = ['📤 آپلود اولین عکس'];
+    } else {
+        $keyboard[] = ['📤 آپلود عکس جدید'];
+        if (count($allPhotos) > 0) {
+            $keyboard[] = ['⭐ انتخاب عکس اصلی'];
+        }
+        if ($mainPhoto || count($allPhotos) > 0) {
+            $keyboard[] = ['👀 مشاهده عکس‌ها'];
+        }
+    }
+    
+    $keyboard[] = ['↩️ بازگشت به منوی پروفایل'];
+    
+    $this->sendMessage($user->telegram_id, $message, $keyboard);
+    $this->updateUserState($user->telegram_id, 'photo_management');
+}
+    private function showUserPhotos($user)
+    {
+        $pdo = $this->getPDO();
+        $sql = "SELECT profile_photo, profile_photos FROM users WHERE telegram_id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$user->telegram_id]);
+        $userData = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        $mainPhoto = $userData['profile_photo'] ?? null;
+        $allPhotos = $userData['profile_photos'] ? json_decode($userData['profile_photos'], true) : [];
+
+        if ($mainPhoto) {
+            $photoUrl = $this->getPhotoUrl($mainPhoto);
+            $this->sendPhoto($user->telegram_id, $photoUrl, "⭐ عکس اصلی پروفایل شما");
+        }
+
+        foreach ($allPhotos as $index => $photo) {
+            $photoUrl = $this->getPhotoUrl($photo);
+            $this->sendPhoto($user->telegram_id, $photoUrl, "عکس #" . ($index + 1));
+        }
+
+        if (!$mainPhoto && empty($allPhotos)) {
+            $this->sendMessage($user->telegram_id, "هنوز هیچ عکس‌ای آپلود نکرده‌اید.");
+        }
+    }
+
+    private function getPhotoUrl($photoFilename)
+    {
+        return "http://yourdomain.com/dating_bot/storage/profile_photos/" . $photoFilename;
+    }
+
+    /**
+     * مدیریت منوی عکس‌ها
+     */
+    private function handlePhotoManagement($user, $text)
+    {
+        switch ($text) {
+            case '📤 آپلود اولین عکس':
+            case '📤 آپلود عکس جدید':
+            case '📷 آپلود عکس دیگر':
+                $this->sendMessage($user->telegram_id, "لطفاً عکس مورد نظر را ارسال کنید:");
+                $this->updateUserState($user->telegram_id, 'uploading_additional_photo');
+                break;
+
+            case '⭐ انتخاب عکس اصلی':
+                return $this->showMainPhotoSelection($user);
+
+            case '👀 مشاهده عکس‌ها':
+                return $this->showUserPhotos($user);
+
+            case '↩️ بازگشت به منوی پروفایل':
+                return $this->showProfileMenu($user);
+
+            case '↩️ بازگشت به منوی اصلی':
+                return $this->showMainMenu($user);
+
+            default:
+                $this->sendMessage($user->telegram_id, "لطفاً یکی از گزینه‌های منو را انتخاب کنید.");
+                $this->showPhotoManagementMenu($user);
+                break;
+        }
+
+        return true;
+    }
+    /**
+     * مدیریت state آپلود عکس
+     */
+    private function handlePhotoUploadState($user, $text)
+    {
+        // اگر کاربر متن ارسال کرد (نه عکس)
+        if ($text && !isset($message['photo'])) {
+            $this->sendMessage($user->telegram_id, "لطفاً یک عکس ارسال کنید. اگر می‌خواهید لغو کنید، از منوی زیر استفاده کنید.");
+
+            $keyboard = [
+                ['❌ لغو آپلود عکس']
+            ];
+            $this->sendMessage($user->telegram_id, "یا از گزینه زیر برای لغو استفاده کنید:", $keyboard);
+            return true;
+        }
+
+        // اگر کاربر گزینه لغو را زد
+        if ($text === '❌ لغو آپلود عکس') {
+            $this->sendMessage($user->telegram_id, "آپلود عکس لغو شد.");
+            $this->showPhotoManagementMenu($user);
+            return true;
+        }
+
+        return false;
+    }
+    /**
+     * نمایش انتخاب عکس اصلی
+     */
+    private function showMainPhotoSelection($user)
+    {
+        $pdo = $this->getPDO();
+        $sql = "SELECT profile_photo, profile_photos FROM users WHERE telegram_id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$user->telegram_id]);
+        $userData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        $allPhotos = $userData['profile_photos'] ? json_decode($userData['profile_photos'], true) : [];
+
+        if (empty($allPhotos)) {
+            $this->sendMessage($user->telegram_id, "❌ هیچ عکس اضافی برای انتخاب وجود ندارد. لطفاً ابتدا عکس‌هایی آپلود کنید.");
+            $this->showPhotoManagementMenu($user);
+            return;
+        }
+
+        // ایجاد کیبورد برای انتخاب عکس اصلی
+        $keyboard = [];
+        foreach ($allPhotos as $index => $photo) {
+            $keyboard[] = ["عکس " . ($index + 1)];
+        }
+        $keyboard[] = ['↩️ بازگشت'];
+
+        $this->sendMessage(
+            $user->telegram_id,
+            "لطفاً عکس مورد نظر را به عنوان عکس اصلی انتخاب کنید:\n\n" .
+            "با انتخاب هر عکس، آن به عنوان تصویر اصلی پروفایل شما تنظیم خواهد شد.",
+            $keyboard
+        );
+
+        $this->updateUserState($user->telegram_id, 'selecting_main_photo');
+    }
+    /**
+     * مدیریت انتخاب عکس اصلی
+     */
+    private function handleMainPhotoSelection($user, $text)
+    {
+        if ($text === '↩️ بازگشت') {
+            $this->showPhotoManagementMenu($user);
+            return true;
+        }
+
+        // تشخیص اینکه کاربر کدام عکس را انتخاب کرده
+        if (preg_match('/عکس (\d+)/', $text, $matches)) {
+            $photoIndex = intval($matches[1]) - 1;
+
+            $pdo = $this->getPDO();
+            $sql = "SELECT profile_photos FROM users WHERE telegram_id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$user->telegram_id]);
+            $userData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $allPhotos = $userData['profile_photos'] ? json_decode($userData['profile_photos'], true) : [];
+
+            if (isset($allPhotos[$photoIndex])) {
+                // تنظیم عکس انتخاب شده به عنوان عکس اصلی
+                $selectedPhoto = $allPhotos[$photoIndex];
+
+                // حذف عکس انتخاب شده از لیست عکس‌های اضافی
+                unset($allPhotos[$photoIndex]);
+                $allPhotos = array_values($allPhotos); // بازنشانی ایندکس‌ها
+
+                // آپدیت دیتابیس
+                $sql = "UPDATE users SET profile_photo = ?, profile_photos = ? WHERE telegram_id = ?";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([$selectedPhoto, json_encode($allPhotos), $user->telegram_id]);
+
+                $this->sendMessage($user->telegram_id, "✅ عکس مورد نظر با موفقیت به عنوان عکس اصلی پروفایل تنظیم شد!");
+                $this->showPhotoManagementMenu($user);
+            } else {
+                $this->sendMessage($user->telegram_id, "❌ عکس انتخاب شده معتبر نیست.");
+                $this->showMainPhotoSelection($user);
+            }
+            return true;
+        }
+
+        $this->sendMessage($user->telegram_id, "لطفاً یکی از عکس‌ها را از منوی زیر انتخاب کنید:");
+        $this->showMainPhotoSelection($user);
+        return true;
+    }
+    /**
+ * ارسال پیام به کاربر
+ */
+private function sendMessage($chatId, $text, $keyboard = null)
+{
+    $token = $this->getBotToken();
+    
+    $data = [
+        'chat_id' => $chatId,
+        'text' => $text,
+        'parse_mode' => 'HTML'
+    ];
+    
+    // اگر کیبورد وجود دارد، اضافه کن
+    if ($keyboard) {
+        $data['reply_markup'] = json_encode([
+            'keyboard' => $keyboard,
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
+        ]);
+    }
+    
+    $url = "https://api.telegram.org/bot{$token}/sendMessage";
+    
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    
+    return $response;
+}
+/**
+ * بروزرسانی state کاربر در دیتابیس
+ */
+private function updateUserState($telegramId, $state)
+{
+    try {
+        $pdo = $this->getPDO();
+        $sql = "UPDATE users SET state = ? WHERE telegram_id = ?";
+        $stmt = $pdo->prepare($sql);
+        $result = $stmt->execute([$state, $telegramId]);
+        
+        if ($result) {
+            echo "✅ User state updated to: $state\n";
+        } else {
+            echo "❌ Failed to update user state\n";
+        }
+        
+        return $result;
+    } catch (\Exception $e) {
+        error_log("Error updating user state: " . $e->getMessage());
+        return false;
+    }
+}
+/**
+ * پیدا کردن کاربر بر اساس telegram_id
+ */
+private function findUserByTelegramId($telegramId)
+{
+    try {
+        $pdo = $this->getPDO();
+        $sql = "SELECT * FROM users WHERE telegram_id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$telegramId]);
+        return $stmt->fetch(\PDO::FETCH_OBJ);
+    } catch (\Exception $e) {
+        error_log("Error finding user: " . $e->getMessage());
+        return null;
+    }
+}
+/**
+ * ایجاد کاربر جدید
+ */
+private function createUser($telegramId, $firstName = null, $username = null, $state = 'start')
+{
+    try {
+        $pdo = $this->getPDO();
+        $sql = "INSERT INTO users (telegram_id, first_name, username, state, created_at) VALUES (?, ?, ?, ?, NOW())";
+        $stmt = $pdo->prepare($sql);
+        $result = $stmt->execute([$telegramId, $firstName, $username, $state]);
+        
+        if ($result) {
+            echo "✅ New user created: $telegramId\n";
+            return $this->findUserByTelegramId($telegramId);
+        }
+        
+        return null;
+    } catch (\Exception $e) {
+        error_log("Error creating user: " . $e->getMessage());
+        return null;
+    }
+}
 }
