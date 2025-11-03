@@ -1,0 +1,23 @@
+{
+    "php.validate.executablePath": "C:\\xampp\\php\\php.exe",
+    "files.watcherExclude": {
+        "**/vendor/**": true,
+        "**/storage/**": true,
+        "**/node_modules/**": true,
+        "**/.git/**": true
+    },
+    "search.exclude": {
+        "**/vendor": true,
+        "**/storage": true,
+        "**/node_modules": true,
+        "**/.git": true
+    },
+    "files.exclude": {
+        "**/vendor": true,
+        "**/storage/logs": true,
+        "**/.git": true
+    },
+    "git.enabled": true,
+    "git.autorefresh": false,
+    "git.openRepositoryInParentFolders": "never"
+}

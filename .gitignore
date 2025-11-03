@@ -22,3 +22,7 @@ Thumbs.db
 /1
 /30
 /lastUpdateId
+storage/last_update_id.txt
+**/*.ls
+.stub/
+.idea/

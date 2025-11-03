@@ -583,12 +583,17 @@ class BotCore
                 $this->fixGenderFilterLogic($user, $chatId);
                 break;
             case 'manage_photos':
-                $this->showPhotoManagementMenu($user);
+                $this->showPhotoManagementMenu($user,$chatId);
                 break;
 
-
+           case 'managing_photos':
+                // در message handler ها $text از پیام کاربر گرفته می‌شود
+                $text = $update['message']['text'] ?? '';
+                return $this->handlePhotoManagement($text, $user, $chatId);
+                        
             case 'selecting_main_photo':
                 return $this->handleMainPhotoSelection($user, $chatId);
+          
 
 
 
@@ -5870,106 +5875,48 @@ class BotCore
         $this->sendMessage($user->telegram_id, "🔧 منوی ویرایش پروفایل:", $keyboard);
     }
 
-    private function showPhotoManagementMenu($user)
-    {
-        // استفاده از $this->getPDO() به جای ایجاد مستقیم PDO
-        $pdo = $this->getPDO();
-        $sql = "SELECT profile_photo, profile_photos FROM users WHERE telegram_id = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$user->telegram_id]);
-        $userData = $stmt->fetch(\PDO::FETCH_ASSOC); // استفاده از \PDO::FETCH_ASSOC
-
-        $mainPhoto = $userData['profile_photo'] ?? null;
-        $allPhotos = $userData['profile_photos'] ? json_decode($userData['profile_photos'], true) : [];
-
-        $message = "📷 مدیریت عکس‌های پروفایل\n\n";
-        $message .= "عکس اصلی: " . ($mainPhoto ? "✅ تنظیم شده" : "❌ تنظیم نشده") . "\n";
-        $message .= "تعداد عکس‌ها: " . (count($allPhotos) + ($mainPhoto ? 1 : 0)) . "\n\n";
-        $message .= "گزینه مورد نظر را انتخاب کنید:";
-
-        $keyboard = [];
-
-        if (empty($allPhotos) && !$mainPhoto) {
-            $keyboard[] = ['📤 آپلود اولین عکس'];
-        } else {
-            $keyboard[] = ['📤 آپلود عکس جدید'];
-            if (count($allPhotos) > 0) {
-                $keyboard[] = ['⭐ انتخاب عکس اصلی'];
-            }
-            if ($mainPhoto || count($allPhotos) > 0) {
-                $keyboard[] = ['👀 مشاهده عکس‌ها'];
-            }
+    private function showPhotoManagementMenu($user, $chatId)
+{
+    $pdo = $this->getPDO();
+    $sql = "SELECT profile_photo, profile_photos FROM users WHERE telegram_id = ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$user->telegram_id]);
+    $userData = $stmt->fetch(\PDO::FETCH_ASSOC);
+    
+    $mainPhoto = $userData['profile_photo'] ?? null;
+    $allPhotos = $userData['profile_photos'] ? json_decode($userData['profile_photos'], true) : [];
+    
+    $message = "📷 مدیریت عکس‌های پروفایل\n\n";
+    $message .= "عکس اصلی: " . ($mainPhoto ? "✅ تنظیم شده" : "❌ تنظیم نشده") . "\n";
+    $message .= "تعداد عکس‌ها: " . (count($allPhotos) + ($mainPhoto ? 1 : 0)) . "\n\n";
+    $message .= "گزینه مورد نظر را انتخاب کنید:";
+    
+    $keyboard = [];
+    
+    if (empty($allPhotos) && !$mainPhoto) {
+        $keyboard[] = ['📤 آپلود اولین عکس'];
+    } else {
+        $keyboard[] = ['📤 آپلود عکس جدید'];
+        if (count($allPhotos) > 0) {
+            $keyboard[] = ['⭐ انتخاب عکس اصلی'];
         }
-
-        $keyboard[] = ['↩️ بازگشت به منوی پروفایل'];
-
-        $this->sendMessage($user->telegram_id, $message, $keyboard);
-        $this->updateUserState($user->telegram_id, 'photo_management');
-    }
-    private function showUserPhotos($user)
-    {
-        $pdo = $this->getPDO();
-        $sql = "SELECT profile_photo, profile_photos FROM users WHERE telegram_id = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$user->telegram_id]);
-        $userData = $stmt->fetch(\PDO::FETCH_ASSOC);
-
-        $mainPhoto = $userData['profile_photo'] ?? null;
-        $allPhotos = $userData['profile_photos'] ? json_decode($userData['profile_photos'], true) : [];
-
-        if ($mainPhoto) {
-            $photoUrl = $this->getPhotoUrl($mainPhoto);
-            $this->sendPhoto($user->telegram_id, $photoUrl, "⭐ عکس اصلی پروفایل شما");
-        }
-
-        foreach ($allPhotos as $index => $photo) {
-            $photoUrl = $this->getPhotoUrl($photo);
-            $this->sendPhoto($user->telegram_id, $photoUrl, "عکس #" . ($index + 1));
-        }
-
-        if (!$mainPhoto && empty($allPhotos)) {
-            $this->sendMessage($user->telegram_id, "هنوز هیچ عکس‌ای آپلود نکرده‌اید.");
+        if ($mainPhoto || count($allPhotos) > 0) {
+            $keyboard[] = ['👀 مشاهده عکس‌ها'];
         }
     }
+    
+    $keyboard[] = ['↩️ بازگشت به منوی پروفایل'];
+    
+    $this->sendMessage($chatId, $message, $keyboard);
+    $this->updateUserState($user->telegram_id, 'photo_management');
+}
 
     private function getPhotoUrl($photoFilename)
     {
         return "http://yourdomain.com/dating_bot/storage/profile_photos/" . $photoFilename;
     }
 
-    /**
-     * مدیریت منوی عکس‌ها
-     */
-    private function handlePhotoManagement($user, $text)
-    {
-        switch ($text) {
-            case '📤 آپلود اولین عکس':
-            case '📤 آپلود عکس جدید':
-            case '📷 آپلود عکس دیگر':
-                $this->sendMessage($user->telegram_id, "لطفاً عکس مورد نظر را ارسال کنید:");
-                $this->updateUserState($user->telegram_id, 'uploading_additional_photo');
-                break;
-
-            case '⭐ انتخاب عکس اصلی':
-                return $this->showMainPhotoSelection($user);
-
-            case '👀 مشاهده عکس‌ها':
-                return $this->showUserPhotos($user);
-
-            case '↩️ بازگشت به منوی پروفایل':
-                return $this->showProfileMenu($user);
-
-            case '↩️ بازگشت به منوی اصلی':
-                return $this->showMainMenu($user);
-
-            default:
-                $this->sendMessage($user->telegram_id, "لطفاً یکی از گزینه‌های منو را انتخاب کنید.");
-                $this->showPhotoManagementMenu($user);
-                break;
-        }
-
-        return true;
-    }
+   
     /**
      * مدیریت state آپلود عکس
      */
@@ -6160,5 +6107,28 @@ class BotCore
             return null;
         }
     }
+    
+   private function handlePhotoManagement($text, $user, $chatId)
+{
+   
+    switch ($text) {
+        case '📤 آپلود اولین عکس':
+        case '📤 آپلود عکس جدید':
+            $this->sendMessage($chatId, "لطفاً عکس مورد نظر را ارسال کنید:");
+            $this->updateUserState($user->telegram_id, 'uploading_additional_photo');
+            break;
+            
+        case '↩️ بازگشت به منوی پروفایل':
+            $this->showProfileMenu($user, $chatId);
+            break;
+            
+        default:
+            $this->sendMessage($chatId, "لطفاً یکی از گزینه‌های منو را انتخاب کنید.");
+            $this->showPhotoManagementMenu($user, $chatId);
+            break;
+    }
+    
+    return true;
+}
 
 }
