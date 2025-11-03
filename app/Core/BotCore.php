@@ -593,10 +593,11 @@ class BotCore
                         
             case 'selecting_main_photo':
                 return $this->handleMainPhotoSelection($user, $chatId);
+          // در متد handleProfileState یا مشابه آن
           
 
 
-
+            
         }
 
         $this->telegram->answerCallbackQuery($callbackQuery['id']);
@@ -1415,27 +1416,61 @@ class BotCore
     }
 
     // ==================== پردازش state‌ها ====================
-    private function handleProfileState($text, $user, $chatId)
-    {
-        error_log("🔵 handleProfileState - State: {$user->state}, Text: {$text}");
-
-        // اگر در حال ویرایش فیلدی از پروفایل هست
-        if (strpos($user->state, 'editing_') === 0) {
-            $this->handleProfileFieldInput($text, $user, $chatId);
-        }
-        // اگر در حال وارد کردن کد شارژ هست
-        elseif ($user->state === 'entering_charge_code') {
-            $this->handleChargeCodeInput($text, $user, $chatId);
-        }
-        // اگر در حال ویرایش فیلتر هست
-        elseif (strpos($user->state, 'editing_filter:') === 0) {
-            $this->handleFilterInput($text, $user, $chatId);
-        } else {
-            error_log("🔴 Unknown state: {$user->state}");
-            // بازگشت به منوی اصلی در صورت state ناشناخته
-            $this->showMainMenu($user, $chatId);
-        }
+  private function handleProfileState($text, $user, $chatId, $message = null)
+{
+    $text = $text ?? '';
+    $text = trim($text);
+    
+    // دیباگ state
+    echo "🔍 handleProfileState - User State: {$user->state}, Text: '$text'\n";
+    
+    switch ($user->state) {
+        case 'managing_photos':
+            return $this->handlePhotoManagement($text, $user, $chatId);
+            
+        case 'uploading_main_photo':
+        case 'uploading_additional_photo':
+            // اگر message داریم و عکس دارد
+            if ($message && isset($message['photo'])) {
+                return $this->handlePhotoMessage($user, $message);
+            } 
+            // اگر کاربر متن ارسال کرده (نه عکس)
+            elseif (!empty($text)) {
+                if ($text === '❌ لغو آپلود عکس') {
+                    $this->sendMessage($chatId, "آپلود عکس لغو شد.");
+                    $this->showPhotoManagementMenu($user, $chatId);
+                } else {
+                    $this->sendMessage($chatId, "لطفاً یک عکس ارسال کنید. برای لغو از گزینه '❌ لغو آپلود عکس' استفاده کنید.");
+                    
+                    $keyboard = [
+                        ['❌ لغو آپلود عکس']
+                    ];
+                    $this->sendMessage($chatId, "یا از منوی زیر برای لغو استفاده کنید:", $keyboard);
+                }
+            }
+            break;
+            
+        case 'selecting_main_photo':
+            return $this->handleMainPhotoSelection($text, $user, $chatId);
+            
+        // سایر state های موجود...
+        case 'entering_name':
+            return $this->handleNameInput($user, $text, $chatId);
+        case 'entering_age':
+            return $this->handleAgeInput($user, $text, $chatId);
+        case 'entering_bio':
+            return $this->handleBioInput($user, $text, $chatId);
+        case 'entering_city':
+            return $this->handleCityInput($user, $text, $chatId);
+        case 'entering_income':
+            return $this->handleIncomeInput($user, $text, $chatId);
+            
+        default:
+            return $this->showMainMenu($user, $chatId);
     }
+    
+    return true;
+}
     // متد جدید برای مدیریت ورودی فیلترها
     private function handleFilterInput($text, $user, $chatId)
     {
@@ -6130,5 +6165,36 @@ class BotCore
     
     return true;
 }
+private function processMessage($message)
+{
+    $chatId = $message['chat']['id'];
+    $user = $this->findOrCreateUser($message['from'], $chatId);
+    $text = $message['text'] ?? '';
+    
+    echo "📨 Process Message - Chat: $chatId, Text: '$text'\n";
+    
+    // اولویت: اگر عکس ارسال شده
+    if (isset($message['photo'])) {
+        echo "🖼️ Photo detected in processMessage\n";
+        
+        // اگر کاربر در state آپلود عکس است
+        if ($user->state === 'uploading_main_photo' || $user->state === 'uploading_additional_photo') {
+            return $this->handlePhotoMessage($user, $message);
+        } else {
+            // اگر عکس ارسال شده اما state مربوطه نیست
+            $this->sendMessage($chatId, "⚠️ برای آپلود عکس، لطفاً از منوی مدیریت عکس‌ها استفاده کنید.");
+            return true;
+        }
+    }
+    
+    // پردازش state معمولی با ارسال message کامل
+    if (isset($user->state)) {
+        return $this->handleProfileState($text, $user, $chatId, $message);
+    }
+    
+    // پردازش دستورات متنی
+    return $this->handleTextCommand($text, $user, $chatId);
+}
+
 
 }
