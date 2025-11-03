@@ -589,7 +589,7 @@ class BotCore
 
             case 'selecting_main_photo':
                 return $this->handleMainPhotoSelection($user, $chatId);
-                
+
 
 
         }
@@ -829,26 +829,20 @@ class BotCore
     }
 
     private function getPDO()
-{
-    static $pdo = null;
-    if ($pdo === null) {
-        $host = 'localhost';
-        $dbname = 'dating_system';
-        $username = 'root';
-        $password = '';
-        
-        try {
-            // استفاده از \PDO برای کلاس global
+    {
+        static $pdo = null;
+        if ($pdo === null) {
+            $host = $_ENV['DB_HOST'] ?? 'localhost';
+            $dbname = $_ENV['DB_NAME'] ?? 'dating_system';
+            $username = $_ENV['DB_USER'] ?? 'root';
+            $password = $_ENV['DB_PASS'] ?? '';
+
             $pdo = new \PDO("mysql:host=$host;dbname=$dbname", $username, $password);
             $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-            echo "✅ PDO connection established\n";
-        } catch (\PDOException $e) {
-            echo "❌ PDO connection failed: " . $e->getMessage() . "\n";
-            throw $e;
         }
+        return $pdo;
     }
-    return $pdo;
-}
+
 
     private function addFieldToUsersTable($field)
     {
@@ -5835,12 +5829,11 @@ class BotCore
         }
         return false;
     }
-
     private function getBotToken()
     {
-        // اینجا توکن ربات خود را برگردانید
         return $_ENV['TELEGRAM_BOT_TOKEN'] ?? '8309595970:AAGaX8wstn-Fby_IzF5cU_a1CxGCPfCEQNk';
     }
+
 
     private function askForMorePhotos($user)
     {
@@ -5878,41 +5871,41 @@ class BotCore
     }
 
     private function showPhotoManagementMenu($user)
-{
-    // استفاده از $this->getPDO() به جای ایجاد مستقیم PDO
-    $pdo = $this->getPDO();
-    $sql = "SELECT profile_photo, profile_photos FROM users WHERE telegram_id = ?";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$user->telegram_id]);
-    $userData = $stmt->fetch(\PDO::FETCH_ASSOC); // استفاده از \PDO::FETCH_ASSOC
-    
-    $mainPhoto = $userData['profile_photo'] ?? null;
-    $allPhotos = $userData['profile_photos'] ? json_decode($userData['profile_photos'], true) : [];
-    
-    $message = "📷 مدیریت عکس‌های پروفایل\n\n";
-    $message .= "عکس اصلی: " . ($mainPhoto ? "✅ تنظیم شده" : "❌ تنظیم نشده") . "\n";
-    $message .= "تعداد عکس‌ها: " . (count($allPhotos) + ($mainPhoto ? 1 : 0)) . "\n\n";
-    $message .= "گزینه مورد نظر را انتخاب کنید:";
-    
-    $keyboard = [];
-    
-    if (empty($allPhotos) && !$mainPhoto) {
-        $keyboard[] = ['📤 آپلود اولین عکس'];
-    } else {
-        $keyboard[] = ['📤 آپلود عکس جدید'];
-        if (count($allPhotos) > 0) {
-            $keyboard[] = ['⭐ انتخاب عکس اصلی'];
+    {
+        // استفاده از $this->getPDO() به جای ایجاد مستقیم PDO
+        $pdo = $this->getPDO();
+        $sql = "SELECT profile_photo, profile_photos FROM users WHERE telegram_id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$user->telegram_id]);
+        $userData = $stmt->fetch(\PDO::FETCH_ASSOC); // استفاده از \PDO::FETCH_ASSOC
+
+        $mainPhoto = $userData['profile_photo'] ?? null;
+        $allPhotos = $userData['profile_photos'] ? json_decode($userData['profile_photos'], true) : [];
+
+        $message = "📷 مدیریت عکس‌های پروفایل\n\n";
+        $message .= "عکس اصلی: " . ($mainPhoto ? "✅ تنظیم شده" : "❌ تنظیم نشده") . "\n";
+        $message .= "تعداد عکس‌ها: " . (count($allPhotos) + ($mainPhoto ? 1 : 0)) . "\n\n";
+        $message .= "گزینه مورد نظر را انتخاب کنید:";
+
+        $keyboard = [];
+
+        if (empty($allPhotos) && !$mainPhoto) {
+            $keyboard[] = ['📤 آپلود اولین عکس'];
+        } else {
+            $keyboard[] = ['📤 آپلود عکس جدید'];
+            if (count($allPhotos) > 0) {
+                $keyboard[] = ['⭐ انتخاب عکس اصلی'];
+            }
+            if ($mainPhoto || count($allPhotos) > 0) {
+                $keyboard[] = ['👀 مشاهده عکس‌ها'];
+            }
         }
-        if ($mainPhoto || count($allPhotos) > 0) {
-            $keyboard[] = ['👀 مشاهده عکس‌ها'];
-        }
+
+        $keyboard[] = ['↩️ بازگشت به منوی پروفایل'];
+
+        $this->sendMessage($user->telegram_id, $message, $keyboard);
+        $this->updateUserState($user->telegram_id, 'photo_management');
     }
-    
-    $keyboard[] = ['↩️ بازگشت به منوی پروفایل'];
-    
-    $this->sendMessage($user->telegram_id, $message, $keyboard);
-    $this->updateUserState($user->telegram_id, 'photo_management');
-}
     private function showUserPhotos($user)
     {
         $pdo = $this->getPDO();
@@ -6086,98 +6079,86 @@ class BotCore
         return true;
     }
     /**
- * ارسال پیام به کاربر
- */
-private function sendMessage($chatId, $text, $keyboard = null)
-{
-    $token = $this->getBotToken();
-    
-    $data = [
-        'chat_id' => $chatId,
-        'text' => $text,
-        'parse_mode' => 'HTML'
-    ];
-    
-    // اگر کیبورد وجود دارد، اضافه کن
-    if ($keyboard) {
-        $data['reply_markup'] = json_encode([
-            'keyboard' => $keyboard,
-            'resize_keyboard' => true,
-            'one_time_keyboard' => false
-        ]);
+     * ارسال پیام به کاربر
+     */
+    private function sendMessage($chatId, $text, $keyboard = null)
+    {
+        $token = $this->getBotToken();
+
+        $data = [
+            'chat_id' => $chatId,
+            'text' => $text,
+            'parse_mode' => 'HTML'
+        ];
+
+        if ($keyboard) {
+            $data['reply_markup'] = json_encode([
+                'keyboard' => $keyboard,
+                'resize_keyboard' => true,
+                'one_time_keyboard' => false
+            ]);
+        }
+
+        $url = "https://api.telegram.org/bot{$token}/sendMessage";
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        return $response;
     }
-    
-    $url = "https://api.telegram.org/bot{$token}/sendMessage";
-    
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    $response = curl_exec($ch);
-    curl_close($ch);
-    
-    return $response;
-}
-/**
- * بروزرسانی state کاربر در دیتابیس
- */
-private function updateUserState($telegramId, $state)
-{
-    try {
+
+    /**
+     * بروزرسانی state کاربر در دیتابیس
+     */
+    private function updateUserState($telegramId, $state)
+    {
         $pdo = $this->getPDO();
         $sql = "UPDATE users SET state = ? WHERE telegram_id = ?";
         $stmt = $pdo->prepare($sql);
-        $result = $stmt->execute([$state, $telegramId]);
-        
-        if ($result) {
-            echo "✅ User state updated to: $state\n";
-        } else {
-            echo "❌ Failed to update user state\n";
+        return $stmt->execute([$state, $telegramId]);
+    }
+    /**
+     * پیدا کردن کاربر بر اساس telegram_id
+     */
+    private function findUserByTelegramId($telegramId)
+    {
+        try {
+            $pdo = $this->getPDO();
+            $sql = "SELECT * FROM users WHERE telegram_id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$telegramId]);
+            return $stmt->fetch(\PDO::FETCH_OBJ);
+        } catch (\Exception $e) {
+            error_log("Error finding user: " . $e->getMessage());
+            return null;
         }
-        
-        return $result;
-    } catch (\Exception $e) {
-        error_log("Error updating user state: " . $e->getMessage());
-        return false;
     }
-}
-/**
- * پیدا کردن کاربر بر اساس telegram_id
- */
-private function findUserByTelegramId($telegramId)
-{
-    try {
-        $pdo = $this->getPDO();
-        $sql = "SELECT * FROM users WHERE telegram_id = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$telegramId]);
-        return $stmt->fetch(\PDO::FETCH_OBJ);
-    } catch (\Exception $e) {
-        error_log("Error finding user: " . $e->getMessage());
-        return null;
-    }
-}
-/**
- * ایجاد کاربر جدید
- */
-private function createUser($telegramId, $firstName = null, $username = null, $state = 'start')
-{
-    try {
-        $pdo = $this->getPDO();
-        $sql = "INSERT INTO users (telegram_id, first_name, username, state, created_at) VALUES (?, ?, ?, ?, NOW())";
-        $stmt = $pdo->prepare($sql);
-        $result = $stmt->execute([$telegramId, $firstName, $username, $state]);
-        
-        if ($result) {
-            echo "✅ New user created: $telegramId\n";
-            return $this->findUserByTelegramId($telegramId);
+    /**
+     * ایجاد کاربر جدید
+     */
+    private function createUser($telegramId, $firstName = null, $username = null, $state = 'start')
+    {
+        try {
+            $pdo = $this->getPDO();
+            $sql = "INSERT INTO users (telegram_id, first_name, username, state, created_at) VALUES (?, ?, ?, ?, NOW())";
+            $stmt = $pdo->prepare($sql);
+            $result = $stmt->execute([$telegramId, $firstName, $username, $state]);
+
+            if ($result) {
+                echo "✅ New user created: $telegramId\n";
+                return $this->findUserByTelegramId($telegramId);
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            error_log("Error creating user: " . $e->getMessage());
+            return null;
         }
-        
-        return null;
-    } catch (\Exception $e) {
-        error_log("Error creating user: " . $e->getMessage());
-        return null;
     }
-}
+
 }
