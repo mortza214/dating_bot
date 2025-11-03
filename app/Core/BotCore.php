@@ -593,8 +593,25 @@ class BotCore
                         
             case 'selecting_main_photo':
                 return $this->handleMainPhotoSelection($user, $chatId);
-          // در متد handleProfileState یا مشابه آن
-          
+          case 'upload_first_photo':
+case 'upload_new_photo':
+    $this->sendMessage($chatId, "لطفاً عکس مورد نظر را ارسال کنید:");
+    $this->updateUserState($user->telegram_id, 'uploading_additional_photo');
+    break;
+
+case 'select_main_photo':
+    $this->sendMessage($chatId, "🔧 این قابلیت به زودی اضافه خواهد شد...");
+    // $this->showMainPhotoSelection($user, $chatId);
+    break;
+
+case 'view_photos':
+    $this->sendMessage($chatId, "🔧 این قابلیت به زودی اضافه خواهد شد...");
+    // $this->showUserPhotos($user, $chatId);
+    break;
+
+case 'back_to_profile_menu':
+    $this->showProfileMenu($user, $chatId);
+    break;
 
 
             
@@ -642,7 +659,7 @@ class BotCore
                         ['text' => '🔧 تعمیر خودکار', 'callback_data' => 'auto_fix_fields']
                     ],
                     [
-                        ['text' => '🔙 بازگشت', 'callback_data' => 'profile']
+                        ['text' => '🔙 بازگشت', 'callback_data' => 'back_to_profile_menu']
                     ]
                 ]
             ];
@@ -1391,9 +1408,9 @@ class BotCore
         $keyboard = [
             'inline_keyboard' => [
                 [
-                    ['text' => '✏️ ویرایش پروفایل', 'callback_data' => 'profile_edit_start'],
-                    ['text' => '📷 مدیریت عکس‌ها', 'callback_data' => 'manage_photos'],
-                    ['text' => '🔙 بازگشت', 'callback_data' => 'back_to_profile']
+                    ['text' => '✏️ ویرایش پروفایل', 'callback_data' => 'back_to_profile_menu'],
+                    ['text' => '📷 مدیریت عکس‌ها', 'callback_data' => 'managing_photos'],
+                    ['text' => '🔙 بازگشت', 'callback_data' => 'profile']
                 ]
             ]
         ];
@@ -5897,20 +5914,43 @@ class BotCore
 
 
 
-    private function showProfileMenu($user)
-    {
-        $keyboard = [
-            ['👤 ویرایش نام', '📝 ویرایش بیو'],
-            ['🏙️ ویرایش شهر', '💰 ویرایش درآمد'],
-            ['📅 ویرایش سن'],
-            ['📷 مدیریت عکس‌های پروفایل'],
-            ['🏠 بازگشت به منوی اصلی']
-        ];
+   private function showProfileMenu($user, $chatId = null)
+{
+    // اگر chatId داده نشده، از telegram_id کاربر استفاده کن
+    $targetChatId = $chatId ?? $user->telegram_id;
+    
+    $message = "🔧 **منوی ویرایش پروفایل**\n\n";
+    $message .= "لطفاً گزینه مورد نظر را انتخاب کنید:";
+    
+    // ایجاد دکمه‌های شیشه‌ای (Inline Keyboard)
+    $inlineKeyboard = [
+        [
+            ['text' => '👤 ویرایش نام', 'callback_data' => 'edit_name'],
+            ['text' => '📝 ویرایش بیو', 'callback_data' => 'edit_bio']
+        ],
+        [
+            ['text' => '🏙️ ویرایش شهر', 'callback_data' => 'edit_city'],
+            ['text' => '💰 ویرایش درآمد', 'callback_data' => 'edit_income']
+        ],
+        [
+            ['text' => '📅 ویرایش سن', 'callback_data' => 'edit_age']
+        ],
+        [
+            ['text' => '📷 مدیریت عکس‌های پروفایل', 'callback_data' => 'manage_photos']
+        ],
+        [
+            ['text' => '🏠 بازگشت به منوی اصلی', 'callback_data' => 'back_to_main']
+        ]
+    ];
+    
+    $replyMarkup = [
+        'inline_keyboard' => $inlineKeyboard
+    ];
+    
+    $this->sendMessage($targetChatId, $message, null, $replyMarkup);
+}
 
-        $this->sendMessage($user->telegram_id, "🔧 منوی ویرایش پروفایل:", $keyboard);
-    }
-
-    private function showPhotoManagementMenu($user, $chatId)
+private function showPhotoManagementMenu($user, $chatId)
 {
     $pdo = $this->getPDO();
     $sql = "SELECT profile_photo, profile_photos FROM users WHERE telegram_id = ?";
@@ -5921,31 +5961,49 @@ class BotCore
     $mainPhoto = $userData['profile_photo'] ?? null;
     $allPhotos = $userData['profile_photos'] ? json_decode($userData['profile_photos'], true) : [];
     
-    $message = "📷 مدیریت عکس‌های پروفایل\n\n";
-    $message .= "عکس اصلی: " . ($mainPhoto ? "✅ تنظیم شده" : "❌ تنظیم نشده") . "\n";
-    $message .= "تعداد عکس‌ها: " . (count($allPhotos) + ($mainPhoto ? 1 : 0)) . "\n\n";
-    $message .= "گزینه مورد نظر را انتخاب کنید:";
+    $message = "📷 **مدیریت عکس‌های پروفایل**\n\n";
+    $message .= "🖼️ عکس اصلی: " . ($mainPhoto ? "✅ تنظیم شده" : "❌ تنظیم نشده") . "\n";
+    $message .= "📊 تعداد عکس‌ها: " . (count($allPhotos) + ($mainPhoto ? 1 : 0)) . "\n\n";
+    $message .= "لطفاً گزینه مورد نظر را انتخاب کنید:";
     
-    $keyboard = [];
+    // ایجاد دکمه‌های شیشه‌ای (Inline Keyboard)
+    $inlineKeyboard = [];
     
     if (empty($allPhotos) && !$mainPhoto) {
-        $keyboard[] = ['📤 آپلود اولین عکس'];
+        // اگر هیچ عکسی ندارد
+        $inlineKeyboard[] = [
+            ['text' => '📤 آپلود اولین عکس', 'callback_data' => 'upload_first_photo']
+        ];
     } else {
-        $keyboard[] = ['📤 آپلود عکس جدید'];
+        // اگر حداقل یک عکس دارد
+        $inlineKeyboard[] = [
+            ['text' => '📤 آپلود عکس جدید', 'callback_data' => 'upload_new_photo']
+        ];
+        
         if (count($allPhotos) > 0) {
-            $keyboard[] = ['⭐ انتخاب عکس اصلی'];
+            $inlineKeyboard[] = [
+                ['text' => '⭐ انتخاب عکس اصلی', 'callback_data' => 'select_main_photo']
+            ];
         }
+        
         if ($mainPhoto || count($allPhotos) > 0) {
-            $keyboard[] = ['👀 مشاهده عکس‌ها'];
+            $inlineKeyboard[] = [
+                ['text' => '👀 مشاهده عکس‌ها', 'callback_data' => 'view_photos']
+            ];
         }
     }
     
-    $keyboard[] = ['↩️ بازگشت به منوی پروفایل'];
+    $inlineKeyboard[] = [
+        ['text' => '↩️ بازگشت به منوی پروفایل', 'callback_data' => 'back_to_profile_menu']
+    ];
     
-    $this->sendMessage($chatId, $message, $keyboard);
+    $replyMarkup = [
+        'inline_keyboard' => $inlineKeyboard
+    ];
+    
+    $this->sendMessage($chatId, $message, null, $replyMarkup);
     $this->updateUserState($user->telegram_id, 'photo_management');
 }
-
     private function getPhotoUrl($photoFilename)
     {
         return "http://yourdomain.com/dating_bot/storage/profile_photos/" . $photoFilename;
@@ -6063,37 +6121,56 @@ class BotCore
     /**
      * ارسال پیام به کاربر
      */
-    private function sendMessage($chatId, $text, $keyboard = null)
-    {
-        $token = $this->getBotToken();
-
-        $data = [
-            'chat_id' => $chatId,
-            'text' => $text,
-            'parse_mode' => 'HTML'
-        ];
-
-        if ($keyboard) {
-            $data['reply_markup'] = json_encode([
-                'keyboard' => $keyboard,
-                'resize_keyboard' => true,
-                'one_time_keyboard' => false
-            ]);
-        }
-
-        $url = "https://api.telegram.org/bot{$token}/sendMessage";
-
+    private function sendMessage($chatId, $text, $keyboard = null, $inlineKeyboard = null)
+{
+    $token = $this->getBotToken();
+    
+    $data = [
+        'chat_id' => $chatId,
+        'text' => $text,
+        'parse_mode' => 'HTML'
+    ];
+    
+    // اگر کیبورد معمولی وجود دارد
+    if ($keyboard && !$inlineKeyboard) {
+        $data['reply_markup'] = json_encode([
+            'keyboard' => $keyboard,
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
+        ]);
+    }
+    
+    // اگر اینلاین کیبورد وجود دارد
+    if ($inlineKeyboard) {
+        $data['reply_markup'] = json_encode($inlineKeyboard);
+    }
+    
+    $url = "https://api.telegram.org/bot{$token}/sendMessage";
+    
+    try {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        
         $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-
+        
+        if ($httpCode !== 200) {
+            error_log("Telegram API error: " . $response);
+            return false;
+        }
+        
         return $response;
+        
+    } catch (Exception $e) {
+        error_log("sendMessage error: " . $e->getMessage());
+        return false;
     }
-
+}
     /**
      * بروزرسانی state کاربر در دیتابیس
      */
@@ -6171,30 +6248,45 @@ private function processMessage($message)
     $user = $this->findOrCreateUser($message['from'], $chatId);
     $text = $message['text'] ?? '';
     
-    echo "📨 Process Message - Chat: $chatId, Text: '$text'\n";
+    echo "📨 Process Message - Chat: $chatId, User State: {$user->state}, Text: '$text'\n";
     
-    // اولویت: اگر عکس ارسال شده
+    // اولویت: اگر عکس ارسال شده - بدون شرط state
     if (isset($message['photo'])) {
         echo "🖼️ Photo detected in processMessage\n";
+        echo "🔍 User state: {$user->state}\n";
         
-        // اگر کاربر در state آپلود عکس است
-        if ($user->state === 'uploading_main_photo' || $user->state === 'uploading_additional_photo') {
-            return $this->handlePhotoMessage($user, $message);
-        } else {
-            // اگر عکس ارسال شده اما state مربوطه نیست
-            $this->sendMessage($chatId, "⚠️ برای آپلود عکس، لطفاً از منوی مدیریت عکس‌ها استفاده کنید.");
+        // مستقیماً handlePhotoMessage را فراخوانی کن - بدون چک state
+        $result = $this->handlePhotoMessage($user, $message);
+        if ($result) {
             return true;
         }
     }
     
-    // پردازش state معمولی با ارسال message کامل
-    if (isset($user->state)) {
+    // اگر state مربوط به آپلود عکس است اما کاربر متن ارسال کرده
+    if (($user->state === 'uploading_main_photo' || $user->state === 'uploading_additional_photo') && !empty($text)) {
+        echo "⚠️ User in photo upload state but sent text: '$text'\n";
+        
+        if ($text === '❌ لغو آپلود عکس') {
+            $this->sendMessage($chatId, "آپلود عکس لغو شد.");
+            $this->showPhotoManagementMenu($user, $chatId);
+        } else {
+            $this->sendMessage($chatId, "لطفاً یک عکس ارسال کنید. برای لغو از گزینه زیر استفاده کنید:");
+            
+            $keyboard = [
+                ['❌ لغو آپلود عکس']
+            ];
+            $this->sendMessage($chatId, "برای لغو آپلود عکس:", $keyboard);
+        }
+        return true;
+    }
+    
+    // پردازش state معمولی
+    if (isset($user->state) && !empty($text)) {
         return $this->handleProfileState($text, $user, $chatId, $message);
     }
     
     // پردازش دستورات متنی
     return $this->handleTextCommand($text, $user, $chatId);
 }
-
 
 }
