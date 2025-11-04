@@ -148,5 +148,38 @@ class User extends Model
     {
         return !empty($this->telegram_photo_id);
     }
+    public function deductFromWallet($amount, $description = 'کسر اعتبار')
+{
+    try {
+        \Illuminate\Support\Facades\DB::transaction(function () use ($amount, $description) {
+            // دریافت کیف پول با قفل برای جلوگیری از race condition
+            $wallet = \App\Models\Wallet::where('user_id', $this->id)->lockForUpdate()->first();
+            
+            if (!$wallet) {
+                throw new \Exception('کیف پول یافت نشد');
+            }
+
+            if ($wallet->balance < $amount) {
+                throw new \Exception('موجودی کافی نیست');
+            }
+
+            // کسر از کیف پول
+            $wallet->balance -= $amount;
+            $wallet->save();
+
+            // ثبت تراکنش
+            \App\Models\Transaction::create([
+                'user_id' => $this->id,
+                'amount' => -$amount,
+                'type' => 'deduction',
+                'description' => $description
+            ]);
+        });
+
+        return true;
+    } catch (\Exception $e) {
+        throw new \Exception('خطا در کسر از کیف پول: ' . $e->getMessage());
+    }
+}
 
 }

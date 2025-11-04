@@ -1051,7 +1051,7 @@ case 'back_to_main_from_photos':
 
     private function showSettingsMenu($user, $chatId)
     {
-       $wallet = $user->getWallet();
+        $wallet = $user->getWallet();
         $actualCompletion = $this->checkProfileCompletion($user);
         $completionPercent = $this->calculateProfileCompletion($user);
 
@@ -4261,88 +4261,49 @@ case 'back_to_main_from_photos':
             $this->telegram->sendMessage($chatId, "❌ خطا در تغییر وضعیت فیلد: " . $e->getMessage());
         }
     }
-    private function handleContactRequest($user, $chatId, $suggestedUserId)
-{
-    $cost = $this->getContactRequestCost();
-    $wallet = $user->getWallet();
-    
-    // 🔴 چک کردن موجودی کیف پول
-    if (!$wallet->hasEnoughBalance($cost)) {
-        $message = "📞 **درخواست اطلاعات تماس**\n\n";
-        $message .= "❌ موجودی کیف پول شما کافی نیست!\n";
-        $message .= "💰 هزینه هر درخواست: " . number_format($cost) . " تومان\n";
-        $message .= "💳 موجودی فعلی: " . number_format($wallet->balance) . " تومان\n\n";
-        $message .= "لطفاً ابتدا کیف پول خود را شارژ کنید.";
+      private function handleContactRequest($user, $chatId, $suggestedUserId)
+    {
+        $cost = $this->getContactRequestCost();
+        $wallet = $user->getWallet();
+        $suggestedUser = User::find($suggestedUserId);
 
-        $keyboard = [
-            'inline_keyboard' => [
-                [
-                    ['text' => '💰 شارژ کیف پول', 'callback_data' => 'wallet_charge'],
-                    ['text' => '🔙 بازگشت', 'callback_data' => 'main_menu']
-                ]
-            ]
-        ];
-
-        $this->telegram->sendMessage($chatId, $message, $keyboard);
-        return;
-    }
-    
-    // اگر موجودی کافی هست، ادامه بده
-    $suggestedUser = User::find($suggestedUserId);
-    
-    if (!$suggestedUser) {
-        $this->telegram->sendMessage($chatId, "❌ کاربر پیدا نشد");
-        return;
-    }
-
-    // 🔴 کسر هزینه از کیف پول
-    $deductionResult = $wallet->deduct($cost, "درخواست اطلاعات تماس - کاربر: {$suggestedUserId}");
-    
-    if (!$deductionResult) {
-        $this->telegram->sendMessage($chatId, "❌ خطا در کسر مبلغ از کیف پول");
-        return;
-    }
-
-    $message = "📞 **اطلاعات تماس کاربر**\n\n";
-    $message .= "👤 نام: {$suggestedUser->first_name}\n";
-    
-    // نمایش نام کاربری اگر وجود دارد
-    if (!empty($suggestedUser->username)) {
-        $message .= "📧 آیدی تلگرام: @{$suggestedUser->username}\n";
-    }
-    
-    $message .= "🆔 شناسه کاربر: {$suggestedUser->telegram_id}\n\n";
-    
-    // نمایش تمام فیلدها (حتی مخفی) پس از پرداخت
-    $activeFields = ProfileField::getActiveFields();
-    foreach ($activeFields as $field) {
-        $value = $suggestedUser->{$field->field_name} ?? 'تعیین نشده';
-        
-        if ($field->field_type === 'select' && is_numeric($value)) {
-            $value = $this->convertSelectValueToText($field, $value);
+        if (!$suggestedUser) {
+            $this->telegram->sendMessage($chatId, "❌ کاربر پیدا نشد");
+            return;
         }
-        
-        $message .= "**{$field->field_label}**: {$value}\n";
+
+        // 🔴 چک کردن آیا قبلاً درخواست داده شده
+        if (ContactRequestHistory::hasRequestedBefore($user->id, $suggestedUserId)) {
+            // اگر قبلاً پرداخت کرده، اطلاعات رو رایگان نمایش بده
+            $this->showContactInfo($user, $chatId, $suggestedUserId, 0);
+            return;
+        }
+
+        // 🔴 چک کردن موجودی کیف پول
+        if (!$wallet->hasEnoughBalance($cost)) {
+            $message = "📞 **درخواست اطلاعات تماس**\n\n";
+            $message .= "❌ موجودی کیف پول شما کافی نیست!\n";
+            $message .= "💰 هزینه هر درخواست: " . number_format($cost) . " تومان\n";
+            $message .= "💳 موجودی فعلی: " . number_format($wallet->balance) . " تومان\n\n";
+            $message .= "لطفاً ابتدا کیف پول خود را شارژ کنید.";
+
+            $keyboard = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => '💰 شارژ کیف پول', 'callback_data' => 'wallet_charge'],
+                        ['text' => '🔙 بازگشت', 'callback_data' => 'main_menu']
+                    ]
+                ]
+            ];
+
+            $this->telegram->sendMessage($chatId, $message, $keyboard);
+            return;
+        }
+
+        // 🔴 نمایش پیام تأیید قبل از کسر مبلغ
+        $this->showConfirmationMessage($user, $chatId, $suggestedUser, $cost);
     }
-    
-    $message .= "\n💰 مبلغ " . number_format($cost) . " تومان از کیف پول شما کسر شد.";
-    $message .= "\n💳 موجودی جدید: " . number_format($wallet->balance) . " تومان";
-    $message .= "\n\n✅ با تشکر از استفاده شما از سرویس ما";
 
-    $keyboard = [
-        'inline_keyboard' => [
-            [
-                ['text' => '💌 پیشنهاد بعدی', 'callback_data' => 'get_suggestion'],
-                ['text' => '🔙 منوی اصلی', 'callback_data' => 'main_menu']
-            ]
-        ]
-    ];
-
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-    
-    // علامت‌گذاری درخواست تماس در تاریخچه
-    \App\Models\UserSuggestion::markContactRequested($user->id, $suggestedUserId);
-}
 
     // 🔴 متد جدید برای پردازش پرداخت پس از تأیید
     private function processContactPayment($user, $chatId, $suggestedUserId)
