@@ -30,6 +30,7 @@ class User extends Model
         'smoking',
         'children',
         'relationship_goal',
+          'telegram_photo_id',
         // فیلدهای جدید نام و نام خانوادگی:
         'first_name_display',
         'health_status',

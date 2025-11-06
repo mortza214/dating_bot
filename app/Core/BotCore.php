@@ -13,8 +13,10 @@ use App\Models\ProfileField;
 use App\Models\Administrator;
 use App\Models\ContactRequestHistory;
 use App\Models\UserFilter;
+use App\Models\UserSuggestion;
 use App\Models\SystemFilter;
 use App\Models\Referral;
+
 use Exception;
 
 
@@ -88,13 +90,21 @@ class BotCore
         }
     }
 
+    public function handleWebhookUpdate()
+    {
+        $update = json_decode(file_get_contents('php://input'), true);
 
+        if (isset($update['message'])) {
+            $this->handleMessage($update['message']);
+        } elseif (isset($update['callback_query'])) {
+            $this->processCallbackQuery($update['callback_query']);
+        }
+    }
 
-  public function handleUpdate()
+    public function handleUpdate()
     {
         try {
             $lastUpdateId = $this->updateManager->getLastUpdateId();
-
             $updates = $this->telegram->getUpdates($lastUpdateId + 1);
 
             if ($updates && $updates['ok'] && !empty($updates['result'])) {
@@ -102,212 +112,237 @@ class BotCore
                     $this->processUpdate($update);
                     $this->updateManager->saveLastUpdateId($update['update_id']);
                 }
-
                 echo "✅ Processed " . count($updates['result']) . " update(s)\n";
-            } else {
-                echo "⏳ No new updates\n";
             }
-// 🔴 اولویت: اگر پیام متنی است، مستقیماً به handleMessage برو
-        if (isset($message['text'])) {
-            error_log("🎯 Bypassing state system - directly to handleMessage");
-            $this->handleMessage($message);
+
+        } catch (\Exception $e) {
+            error_log("Bot Error: " . $e->getMessage());
+        }
+    }
+    private function processUpdate($update)
+    {
+        if (isset($update['message'])) {
+            $message = $update['message'];
+               $chatId = $message['chat']['id'];
+
+             $user = User::where('telegram_id', $chatId)->first();
+        
+        if (!$user) {
+            $this->handleStartCommand($message);
             return;
         }
-        
-        // اگر عکس است
-        if (isset($message['photo'])) {
-            $this->handlePhotoMessage($message);
-        }
-        
-    } elseif (isset($update['callback_query'])) {
-        $this->processCallbackQuery($update['callback_query']);
-    }
-    }
-   public function processUpdate($update)
-{
-    echo "🔍 FULL UPDATE STRUCTURE:\n";
-    echo json_encode($update, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n";
-    echo "=====================\n";
-    
-    if (isset($update['message'])) {
-        echo "📨 Processing as message\n";
-        return $this->processMessage($update['message']);
-    }
-    
-    if (isset($update['callback_query'])) {
-        echo "🔘 Processing as callback query\n";
-        return $this->processCallbackQuery($update['callback_query']);
-    }
-    
-    // بررسی سایر ساختارهای ممکن
-    if (isset($update['edited_message'])) {
-        echo "📝 Processing as edited message\n";
-        return $this->processMessage($update['edited_message']);
-    }
-    
-    if (isset($update['channel_post'])) {
-        echo "📢 Processing as channel post\n";
-        return $this->processMessage($update['channel_post']);
-    }
-    
-    echo "❌ Unknown update type\n";
-    return false;
-}
 
-  private function findOrCreateUser($from, $chatId = null)
-{
-    $telegramId = $from['id'];
-    
-    // اول سعی کن از Eloquent استفاده کنی
-    if (class_exists('App\Models\User') && class_exists('Illuminate\Database\Eloquent\Model')) {
-        try {
-            $user = \App\Models\User::where('telegram_id', $telegramId)->first();
-            
-            if (!$user) {
-                // ایجاد کاربر جدید با Eloquent
-                $user = \App\Models\User::create([
-                    'telegram_id' => $telegramId,
-                    'first_name' => $from['first_name'] ?? '',
-                    'username' => $from['username'] ?? '',
-                    'state' => 'start'
-                ]);
-                
-                echo "✅ Created new user with Eloquent: {$user->telegram_id}\n";
-            } else {
-                echo "🔍 Found user with Eloquent: {$user->telegram_id}, State: {$user->state}\n";
+            if (isset($message['text'])) {
+                $this->handleMessage($message);
+            } elseif (isset($message['photo'])) {
+                $this->handlePhotoMessage($user, $message);
+              
             }
-            
-            return $user;
-            
-        } catch (\Exception $e) {
-            echo "❌ Eloquent failed: " . $e->getMessage() . "\n";
-            // ادامه با روش PDO
+        } elseif (isset($update['callback_query'])) {
+            $this->processCallbackQuery($update['callback_query']);
         }
     }
-    
-    // روش fallback با PDO
-    $pdo = $this->getPDO();
-    $sql = "SELECT * FROM users WHERE telegram_id = ?";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$telegramId]);
-    $userData = $stmt->fetch(\PDO::FETCH_ASSOC);
-    
-    if ($userData) {
-        echo "🔍 Found user with PDO: {$telegramId}, State: {$userData['state']}\n";
-        
-        // اگر مدل User وجود دارد اما Eloquent مشکل داشت
-        if (class_exists('App\Models\User')) {
-            $user = new \App\Models\User();
-            foreach ($userData as $key => $value) {
-                $user->$key = $value;
+
+    private function findOrCreateUser($from, $chatId = null)
+    {
+        $telegramId = $from['id'];
+
+        // اول سعی کن از Eloquent استفاده کنی
+        if (class_exists('App\Models\User') && class_exists('Illuminate\Database\Eloquent\Model')) {
+            try {
+                $user = \App\Models\User::where('telegram_id', $telegramId)->first();
+
+                if (!$user) {
+                    // ایجاد کاربر جدید با Eloquent
+                    $user = \App\Models\User::create([
+                        'telegram_id' => $telegramId,
+                        'first_name' => $from['first_name'] ?? '',
+                        'username' => $from['username'] ?? '',
+                        'state' => 'start'
+                    ]);
+
+                    echo "✅ Created new user with Eloquent: {$user->telegram_id}\n";
+                } else {
+                    echo "🔍 Found user with Eloquent: {$user->telegram_id}, State: {$user->state}\n";
+                }
+
+                return $user;
+
+            } catch (\Exception $e) {
+                echo "❌ Eloquent failed: " . $e->getMessage() . "\n";
+                // ادامه با روش PDO
             }
-        } else {
-            $user = new \stdClass();
-            foreach ($userData as $key => $value) {
-                $user->$key = $value;
-            }
-            // اضافه کردن متد getWallet به stdClass
-            $user->getWallet = function() {
-                $wallet = new \stdClass();
-                $wallet->balance = 0;
-                $wallet->currency = 'تومان';
-                $wallet->formatBalance = function() use ($wallet) {
-                    return number_format($wallet->balance) . ' ' . $wallet->currency;
-                };
-                return $wallet;
-            };
-            $user->getFormattedBalance = function() {
-                return number_format(0) . ' تومان';
-            };
         }
-        
-        return $user;
-    } else {
-        // ایجاد کاربر جدید با PDO
-        echo "🆕 Creating new user with PDO: {$telegramId}\n";
-        
-        $sql = "INSERT INTO users (telegram_id, first_name, username, state, created_at) VALUES (?, ?, ?, ?, NOW())";
+
+        // روش fallback با PDO
+        $pdo = $this->getPDO();
+        $sql = "SELECT * FROM users WHERE telegram_id = ?";
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([$telegramId, $from['first_name'] ?? '', $from['username'] ?? '', 'start']);
-        
-        if (class_exists('App\Models\User')) {
-            $user = new \App\Models\User();
-        } else {
-            $user = new \stdClass();
-        }
-        
-        $user->telegram_id = $telegramId;
-        $user->first_name = $from['first_name'] ?? '';
-        $user->username = $from['username'] ?? '';
-        $user->state = 'start';
-        
-        if ($user instanceof \stdClass) {
-            $user->getWallet = function() {
-                $wallet = new \stdClass();
-                $wallet->balance = 0;
-                $wallet->currency = 'تومان';
-                $wallet->formatBalance = function() use ($wallet) {
-                    return number_format($wallet->balance) . ' ' . $wallet->currency;
+        $stmt->execute([$telegramId]);
+        $userData = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if ($userData) {
+            echo "🔍 Found user with PDO: {$telegramId}, State: {$userData['state']}\n";
+
+            // اگر مدل User وجود دارد اما Eloquent مشکل داشت
+            if (class_exists('App\Models\User')) {
+                $user = new \App\Models\User();
+                foreach ($userData as $key => $value) {
+                    $user->$key = $value;
+                }
+            } else {
+                $user = new \stdClass();
+                foreach ($userData as $key => $value) {
+                    $user->$key = $value;
+                }
+                // اضافه کردن متد getWallet به stdClass
+                $user->getWallet = function () {
+                    $wallet = new \stdClass();
+                    $wallet->balance = 0;
+                    $wallet->currency = 'تومان';
+                    $wallet->formatBalance = function () use ($wallet) {
+                        return number_format($wallet->balance) . ' ' . $wallet->currency;
+                    };
+                    return $wallet;
                 };
-                return $wallet;
-            };
-            $user->getFormattedBalance = function() {
-                return number_format(0) . ' تومان';
-            };
+                $user->getFormattedBalance = function () {
+                    return number_format(0) . ' تومان';
+                };
+            }
+
+            return $user;
+        } else {
+            // ایجاد کاربر جدید با PDO
+            echo "🆕 Creating new user with PDO: {$telegramId}\n";
+
+            $sql = "INSERT INTO users (telegram_id, first_name, username, state, created_at) VALUES (?, ?, ?, ?, NOW())";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$telegramId, $from['first_name'] ?? '', $from['username'] ?? '', 'start']);
+
+            if (class_exists('App\Models\User')) {
+                $user = new \App\Models\User();
+            } else {
+                $user = new \stdClass();
+            }
+
+            $user->telegram_id = $telegramId;
+            $user->first_name = $from['first_name'] ?? '';
+            $user->username = $from['username'] ?? '';
+            $user->state = 'start';
+
+            if ($user instanceof \stdClass) {
+                $user->getWallet = function () {
+                    $wallet = new \stdClass();
+                    $wallet->balance = 0;
+                    $wallet->currency = 'تومان';
+                    $wallet->formatBalance = function () use ($wallet) {
+                        return number_format($wallet->balance) . ' ' . $wallet->currency;
+                    };
+                    return $wallet;
+                };
+                $user->getFormattedBalance = function () {
+                    return number_format(0) . ' تومان';
+                };
+            }
+
+            return $user;
         }
-        
-        return $user;
-    }
-}
-
-public function handleMessage($message)
-{
-    $text = $message['text'];
-    $chatId = $message['chat']['id'];
-       error_log("🎯 handleMessage called with text: '{$text}'");
-    
-    $user = User::where('telegram_id', $chatId)->first();
-    
-    if (!$user) {
-        $this->handleStartCommand($message);
-        return;
     }
 
-   // 🔴 به‌روزرسانی state کاربر به main_menu
-    $user->update(['state' => 'main_menu']);
-     error_log("✅ User state updated to: main_menu");
+    public function handleMessage($message)
+    {
+        $text = $message['text'];
+        $chatId = $message['chat']['id'];
 
-    // پردازش متن دکمه‌ها - استفاده از همان متدهای processCallbackQuery
-    switch($text) {
-        case '/start':
+        error_log("🎯 handleMessage called with text: '{$text}' for chat: {$chatId}");
+
+        $user = \App\Models\User::where('telegram_id', $chatId)->first();
+
+        if (!$user) {
             $this->handleStartCommand($message);
-            break;
-        case '📜 تاریخچه درخواست‌ها':
-            $this->showContactHistory($user, $chatId);
-            break;
-        case '💌 دریافت پیشنهاد':
-            $this->handleGetSuggestion($user, $chatId); // 🔴 تغییر به handleGetSuggestion
-            break;
-        case '⚙️ تنظیمات':
-            $this->showSettingsMenu($user, $chatId); // 🔴 تغییر به showSettingsMenu
-            break;
-        case '👥 سیستم دعوت':
-            $this->showReferralMenu($user, $chatId); // 🔴 تغییر به showReferralMenu
-            break;
-        case 'ℹ️ راهنمای استفاده':
-            $this->showHelpMenu($user, $chatId); // 🔴 تغییر به showHelpMenu
-            break;
-        case '📊 پروفایل من':
-            $this->showProfile($user, $chatId);
-            break;
-        case '🔙 بازگشت':
-            $this->showMainMenu($user, $chatId);
-            break;
-        default:
-            $this->showMainMenu($user, $chatId);
+            return;
+        }
+
+        // به‌روزرسانی state به main_menu برای اطمینان
+        if ($user->state !== 'main_menu') {
+            $user->update(['state' => 'main_menu']);
+        }
+
+        switch ($text) {
+            case '/start':
+                $this->handleStartCommand($message);
+                break;
+            case '📜 تاریخچه درخواست‌ها':
+                $this->showContactHistory($user, $chatId);
+                break;
+            case '💌 دریافت پیشنهاد':
+                $this->handleGetSuggestion($user, $chatId);
+                break;
+            case '⚙️ تنظیمات':
+                $this->showSettingsMenu($user, $chatId);
+                break;
+            case '👥 سیستم دعوت':
+                $this->handleReferral($user, $chatId);
+                break;
+            case 'ℹ️ راهنمای استفاده':
+                $this->handleHelp($chatId);
+                break;
+            case '📊 پروفایل من':
+                $this->showProfile($user, $chatId);
+                break;
+            case '🔙 بازگشت':
+                $this->showMainMenu($user, $chatId);
+                break;
+            default:
+                // اگر دستور شناخته شده نیست، منوی اصلی نشان داده شود
+                $this->showMainMenu($user, $chatId);
+            case '💌 دریافت پیشنهاد':
+                error_log("💡 Calling handleGetSuggestion");
+                $this->handleGetSuggestion($user, $chatId);
+                break;
+            // در متد handleMessage - برای دکمه "📞 درخواست اطلاعات تماس"
+            case '📞 درخواست اطلاعات تماس':
+                error_log("📞 Contact request button clicked - looking for suggested user ID");
+
+                // پیدا کردن آخرین suggested_user_id از state یا آخرین پیشنهاد
+                $suggestedUserId = $this->findSuggestedUserId($user, $chatId);
+
+                if ($suggestedUserId) {
+                    error_log("🎯 Found suggested user ID: {$suggestedUserId}");
+                    $this->handleContactRequest($user, $chatId, $suggestedUserId);
+                } else {
+                    error_log("❌ No suggested user ID found");
+                    $this->telegram->sendMessage(
+                        $chatId,
+                        "❌ کاربری برای درخواست تماس یافت نشد.\nلطفاً ابتدا از قسمت '💌 دریافت پیشنهاد' یک کاربر را مشاهده کنید."
+                    );
+                    $this->showMainMenu($user, $chatId);
+                }
+                break;
+            case '💌 پیشنهاد بعدی':
+                error_log("🔄 Calling handleGetSuggestion for next suggestion");
+                $this->handleGetSuggestion($user, $chatId);
+                break;
+
+            case '⚙️ تنظیم فیلترها':
+                error_log("⚙️ Calling showFilterSettings");
+                $this->handleEditFilters($user, $chatId);
+                break;
+            case '🔙 منوی اصلی':
+                error_log("⚙️ Calling showFilterSettings");
+                $this->showMainMenu($user, $chatId);
+                break;
+
+            // در handleMessage - برای دکمه‌های معمولی تاریخچه
+            case '💌 پیشنهاد جدید':
+                error_log("💌 Calling handleGetSuggestion from history");
+                $this->handleGetSuggestion($user, $chatId);
+                break;
+
+          
+        }
     }
-}
-    private function processCallbackQuery($callbackQuery)
+    public function processCallbackQuery($callbackQuery)
     {
         PerformanceMonitor::start('callback_' . $callbackQuery['data']);
         $chatId = $callbackQuery['message']['chat']['id'];
@@ -357,7 +392,7 @@ public function handleMessage($message)
                 break;
             case 'back_to_profile_menu':
                 $this->showProfilemenu($user, $chatId);
-                break;    
+                break;
             case 'profile_status':
                 $this->showProfileStatus($user, $chatId);
                 break;
@@ -743,24 +778,24 @@ public function handleMessage($message)
                 echo "🔍 User state after update: " . ($updatedUser->state ?? 'NOT SET') . "\n";
                 break;
 
-           case 'upload_more_photos':
-    $this->sendMessage($chatId, "لطفاً عکس بعدی را ارسال کنید:");
-    $this->updateUserState($user->telegram_id, 'uploading_additional_photo');
-    break;
+            case 'upload_more_photos':
+                $this->sendMessage($chatId, "لطفاً عکس بعدی را ارسال کنید:");
+                $this->updateUserState($user->telegram_id, 'uploading_additional_photo');
+                break;
 
-case 'select_main_photo_menu':
-    $this->sendMessage($chatId, "🔧 این قابلیت به زودی اضافه خواهد شد...");
-    // $this->showMainPhotoSelection($user, $chatId);
-    break;
+            case 'select_main_photo_menu':
+                $this->sendMessage($chatId, "🔧 این قابلیت به زودی اضافه خواهد شد...");
+                // $this->showMainPhotoSelection($user, $chatId);
+                break;
 
-case 'view_all_photos':
-    $this->sendMessage($chatId, "🔧 این قابلیت به زودی اضافه خواهد شد...");
-    // $this->showUserPhotos($user, $chatId);
-    break;
+            case 'view_all_photos':
+                $this->sendMessage($chatId, "🔧 این قابلیت به زودی اضافه خواهد شد...");
+                // $this->showUserPhotos($user, $chatId);
+                break;
 
-case 'back_to_main_from_photos':
-    $this->showMainMenu($user, $chatId);
-    break;
+            case 'back_to_main_from_photos':
+                $this->showMainMenu($user, $chatId);
+                break;
 
 
 
@@ -1059,57 +1094,57 @@ case 'back_to_main_from_photos':
     }
 
     // ==================== منوی اصلی ====================
-   private function showMainMenu($user, $chatId)
-{
-    $wallet = $user->getWallet();
-    $cost = $this->getContactRequestCost();
+    private function showMainMenu($user, $chatId)
+    {
+        $wallet = $user->getWallet();
+        $cost = $this->getContactRequestCost();
 
-    // بررسی دقیق وضعیت پروفایل
-    $actualCompletion = $this->checkProfileCompletion($user);
-    $completionPercent = $this->calculateProfileCompletion($user);
+        // بررسی دقیق وضعیت پروفایل
+        $actualCompletion = $this->checkProfileCompletion($user);
+        $completionPercent = $this->calculateProfileCompletion($user);
 
-    // اگر وضعیت در دیتابیس با واقعیت تطابق ندارد، آپدیت کن
-    if ($user->is_profile_completed != $actualCompletion) {
-        $user->update(['is_profile_completed' => $actualCompletion]);
-    }
+        // اگر وضعیت در دیتابیس با واقعیت تطابق ندارد، آپدیت کن
+        if ($user->is_profile_completed != $actualCompletion) {
+            $user->update(['is_profile_completed' => $actualCompletion]);
+        }
 
-    $message = "🎯 **منوی اصلی ربات دوستیابی**\n\n";
-    $message .= "👤 کاربر: " . $user->first_name . "\n";
-    $message .= "💰 موجودی: " . number_format($wallet->balance) . " تومان\n";
-    $message .= "📊 وضعیت پروفایل: " . ($actualCompletion ? "✅ تکمیل شده" : "❌ ناقص ({$completionPercent}%)") . "\n\n";
+        $message = "🎯 **منوی اصلی ربات دوستیابی**\n\n";
+        $message .= "👤 کاربر: " . $user->first_name . "\n";
+        $message .= "💰 موجودی: " . number_format($wallet->balance) . " تومان\n";
+        $message .= "📊 وضعیت پروفایل: " . ($actualCompletion ? "✅ تکمیل شده" : "❌ ناقص ({$completionPercent}%)") . "\n\n";
 
-    // 🔴 اضافه کردن وضعیت پیشنهادات
-    $suggestionCount = \App\Models\UserSuggestion::getUserSuggestionCount($user->id);
-    $message .= "💌 پیشنهادات دریافت شده: " . $suggestionCount . "\n\n";
+        // 🔴 اضافه کردن وضعیت پیشنهادات
+        $suggestionCount = \App\Models\UserSuggestion::getUserSuggestionCount($user->id);
+        $message .= "💌 پیشنهادات دریافت شده: " . $suggestionCount . "\n\n";
 
-    if (!$actualCompletion) {
-        $message .= "⚠️ **توجه:** برای استفاده از امکانات ربات، لطفاً پروفایل خود را کامل کنید.\n\n";
-    }
+        if (!$actualCompletion) {
+            $message .= "⚠️ **توجه:** برای استفاده از امکانات ربات، لطفاً پروفایل خود را کامل کنید.\n\n";
+        }
 
-    $message .= "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:";
+        $message .= "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:";
 
-    // کیبورد معمولی (ReplyKeyboard) برای پایین صفحه
-    $keyboard = [
-        'keyboard' => [
-            [
-                ['text' => '📜 تاریخچه درخواست‌ها'], 
-                ['text' => '💌 دریافت پیشنهاد']
+        // کیبورد معمولی (ReplyKeyboard) برای پایین صفحه
+        $keyboard = [
+            'keyboard' => [
+                [
+                    ['text' => '📜 تاریخچه درخواست‌ها'],
+                    ['text' => '💌 دریافت پیشنهاد']
+                ],
+                [
+                    ['text' => '⚙️ تنظیمات'],
+                    ['text' => '👥 سیستم دعوت']
+                ],
+                [
+                    ['text' => 'ℹ️ راهنمای استفاده'],
+                    ['text' => '📊 پروفایل من']
+                ]
             ],
-            [
-                ['text' => '⚙️ تنظیمات'],
-                ['text' => '👥 سیستم دعوت']
-            ],
-            [
-                ['text' => 'ℹ️ راهنمای استفاده'],
-                ['text' => '📊 پروفایل من']
-            ]
-        ],
-        'resize_keyboard' => true,
-        'one_time_keyboard' => false
-    ];
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
+        ];
 
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+    }
 
     private function showSettingsMenu($user, $chatId)
     {
@@ -3191,6 +3226,7 @@ case 'back_to_main_from_photos':
 
     private function handleGetSuggestion($user, $chatId)
     {
+        error_log("🎯 handleGetSuggestion START - User: {$user->id}, Profile Completed: " . ($user->is_profile_completed ? 'YES' : 'NO'));
         // چک کردن تکمیل بودن پروفایل
         if (!$user->is_profile_completed) {
             $message = "❌ **برای دریافت پیشنهاد باید پروفایل شما تکمیل باشد!**\n\n";
@@ -3226,12 +3262,14 @@ case 'back_to_main_from_photos':
 
         error_log("🎯 درخواست پیشنهاد برای کاربر: {$user->id} - {$user->first_name}");
 
+
         // دریافت فیلترهای کاربر
         $userFilters = UserFilter::getFilters($user->id);
         error_log("📋 فیلترهای کاربر: " . json_encode($userFilters));
-
+        error_log("🔍 Calling findSuggestionWithFilters...");
         // پیدا کردن پیشنهاد
         $suggestedUser = $this->findSuggestionWithFilters($user, $userFilters);
+        error_log("📊 findSuggestionWithFilters result: " . ($suggestedUser ? "FOUND User ID: {$suggestedUser->id}" : "NOT FOUND"));
 
         if (!$suggestedUser) {
             $message = "😔 **در حال حاضر کاربر مناسبی برای نمایش پیدا نشد!**\n\n";
@@ -3778,7 +3816,6 @@ case 'back_to_main_from_photos':
     {
         $cost = $this->getContactRequestCost();
 
-
         $message = "📋 **مشخصات:**\n\n";
 
         // نمایش فیلدهای عمومی پروفایل
@@ -3786,11 +3823,9 @@ case 'back_to_main_from_photos':
         $displayedFieldsCount = 0;
 
         foreach ($activeFields as $field) {
-            // چک کردن وضعیت نمایش فیلد
             if ($this->shouldDisplayField($user, $field)) {
                 $value = $suggestedUser->{$field->field_name} ?? 'تعیین نشده';
 
-                // 🔴 اصلاح: تبدیل جنسیت به فارسی برای نمایش
                 if ($field->field_name === 'gender') {
                     $value = $this->convertGenderForDisplay($value);
                 } elseif ($field->field_type === 'select' && is_numeric($value)) {
@@ -3802,7 +3837,6 @@ case 'back_to_main_from_photos':
             }
         }
 
-        // اگر هیچ فیلدی نمایش داده نشد
         if ($displayedFieldsCount === 0) {
             $message .= "👀 اطلاعات بیشتری برای نمایش موجود نیست.\n";
             $message .= "💼 برای مشاهده اطلاعات کامل، اشتراک تهیه کنید.\n";
@@ -3811,20 +3845,39 @@ case 'back_to_main_from_photos':
         $shownCount = \App\Models\UserSuggestion::getShownCount($user->id, $suggestedUser->id);
         $message .= "\n⭐ این فرد {$shownCount} بار برای شما نمایش داده شده است.";
 
-        $keyboard = [
+        // 🔴 فقط دکمه درخواست اطلاعات به صورت اینلاین (شیشه‌ای)
+        $inlineKeyboard = [
             'inline_keyboard' => [
                 [
-                    ['text' => '📞 درخواست اطلاعات تماس', 'callback_data' => "request_contact:{$suggestedUser->id}"],
-                    ['text' => '💌 پیشنهاد بعدی', 'callback_data' => 'get_suggestion']
-                ],
-                [
-                    ['text' => '⚙️ تنظیم فیلترها', 'callback_data' => 'edit_filters'],
-                    ['text' => '🔙 منوی اصلی', 'callback_data' => 'main_menu']
+                    ['text' => '📞 درخواست اطلاعات تماس', 'callback_data' => "request_contact:{$suggestedUser->id}"]
                 ]
             ]
         ];
 
-        $this->telegram->sendMessage($chatId, $message, $keyboard);
+        // 🔵 دکمه‌های دیگر به صورت ReplyKeyboard معمولی
+        $replyKeyboard = [
+            'keyboard' => [
+                [
+                    ['text' => '💌 پیشنهاد بعدی']
+                ],
+                [
+                    ['text' => '⚙️ تنظیم فیلترها'],
+                    ['text' => '🔙 منوی اصلی']
+                ]
+            ],
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
+        ];
+
+        // اول پیام با دکمه اینلاین بفرست
+        $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
+
+        // سپس کیبورد معمولی را تنظیم کن (اصلاح: $keyboard به $replyKeyboard)
+        $this->telegram->sendMessage($chatId, "", $replyKeyboard);
+
+        $newState = 'viewing_suggestion:' . $suggestedUser->id;
+        $user->update(['state' => $newState]);
+        error_log("💾 STATE UPDATED: {$newState}");
     }
     // 🔴 متد جدید برای چک کردن نمایش فیلد
     private function shouldDisplayField($user, $field)
@@ -4323,7 +4376,7 @@ case 'back_to_main_from_photos':
             $this->telegram->sendMessage($chatId, "❌ خطا در تغییر وضعیت فیلد: " . $e->getMessage());
         }
     }
-      private function handleContactRequest($user, $chatId, $suggestedUserId)
+    private function handleContactRequest($user, $chatId, $suggestedUserId)
     {
         $cost = $this->getContactRequestCost();
         $wallet = $user->getWallet();
@@ -4481,11 +4534,11 @@ case 'back_to_main_from_photos':
 
         // دریافت رکوردهای صفحه جاری - استفاده از bindValue
         $sql = "SELECT crh.*, u.first_name, u.username, u.telegram_id 
-            FROM contact_request_history crh 
-            JOIN users u ON crh.requested_user_id = u.id 
-            WHERE crh.user_id = ? 
-            ORDER BY crh.requested_at DESC 
-            LIMIT ? OFFSET ?";
+        FROM contact_request_history crh 
+        JOIN users u ON crh.requested_user_id = u.id 
+        WHERE crh.user_id = ? 
+        ORDER BY crh.requested_at DESC 
+        LIMIT ? OFFSET ?";
 
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(1, $user->id, \PDO::PARAM_INT);
@@ -4500,16 +4553,28 @@ case 'back_to_main_from_photos':
             $message .= "📭 شما تاکنون هیچ درخواست تماسی نداشته‌اید.\n\n";
             $message .= "💡 پس از درخواست اطلاعات تماس برای هر کاربر، اطلاعات آنها در اینجا ذخیره می‌شود و می‌توانید بدون پرداخت مجدد آنها را مشاهده کنید.";
 
-            $keyboard = [
+            // کیبورد اینلاین برای حالت خالی
+            $inlineKeyboard = [
                 'inline_keyboard' => [
                     [
-                        ['text' => '💌 دریافت پیشنهاد', 'callback_data' => 'get_suggestion'],
-                        ['text' => '🔙 منوی اصلی', 'callback_data' => 'main_menu']
+                        ['text' => '💌 دریافت پیشنهاد', 'callback_data' => 'get_suggestion']
                     ]
                 ]
             ];
 
-            $this->telegram->sendMessage($chatId, $message, $keyboard);
+            // کیبورد معمولی
+            $replyKeyboard = [
+                'keyboard' => [
+                    [
+                        ['text' => '🔙 منوی اصلی']
+                    ]
+                ],
+                'resize_keyboard' => true,
+                'one_time_keyboard' => false
+            ];
+
+            $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
+            $this->telegram->sendMessage($chatId, "", $replyKeyboard);
             return;
         }
 
@@ -4526,12 +4591,12 @@ case 'back_to_main_from_photos':
             $message .= "────────────\n";
         }
 
-        // ایجاد کیبورد دینامیک
-        $keyboard = ['inline_keyboard' => []];
+        // ایجاد کیبورد اینلاین برای جزئیات و صفحه‌بندی
+        $inlineKeyboard = ['inline_keyboard' => []];
 
         // دکمه‌های مشاهده جزئیات برای هر کاربر
         foreach ($history as $record) {
-            $keyboard['inline_keyboard'][] = [
+            $inlineKeyboard['inline_keyboard'][] = [
                 [
                     'text' => "👤 مشاهده {$record->first_name}",
                     'callback_data' => "contact_history_view:{$record->requested_user_id}"
@@ -4549,16 +4614,26 @@ case 'back_to_main_from_photos':
         }
 
         if (!empty($paginationButtons)) {
-            $keyboard['inline_keyboard'][] = $paginationButtons;
+            $inlineKeyboard['inline_keyboard'][] = $paginationButtons;
         }
 
-        // دکمه‌های اصلی
-        $keyboard['inline_keyboard'][] = [
-            ['text' => '💌 پیشنهاد جدید', 'callback_data' => 'get_suggestion'],
-            ['text' => '🔙 منوی اصلی', 'callback_data' => 'main_menu']
+        // کیبورد معمولی برای دکمه‌های اصلی
+        $replyKeyboard = [
+            'keyboard' => [
+                [
+                    ['text' => '💌 پیشنهاد جدید'],
+                    ['text' => '🔙 منوی اصلی']
+                ]
+            ],
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
         ];
 
-        $this->telegram->sendMessage($chatId, $message, $keyboard);
+        // ارسال پیام با کیبورد اینلاین
+        $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
+
+        // ارسال کیبورد معمولی
+        $this->telegram->sendMessage($chatId, "", $replyKeyboard);
     }
 
     private function showContactDetails($user, $chatId, $requestedUserId)
@@ -6003,59 +6078,62 @@ case 'back_to_main_from_photos':
         return $user;
     }
     // در کلاس BotCore
-    public function handlePhotoMessage($user, $message)
+  public function handlePhotoMessage($user, $message)
 {
-    echo "🖼️ handlePhotoMessage called - User State: {$user->state}\n";
-
-    if (isset($message['photo'])) {
-        echo "📸 Photo array structure:\n";
-        foreach ($message['photo'] as $index => $photoSize) {
-            echo "  [$index] file_id: " . ($photoSize['file_id'] ?? 'NOT FOUND') . "\n";
-        }
-        
-        $photo = end($message['photo']); // بزرگترین سایز
-        $botToken = $this->getBotToken();
-
-        echo "🎯 Selected largest photo - file_id: " . ($photo['file_id'] ?? 'NOT FOUND') . "\n";
-        echo "🔑 Bot Token: " . (!empty($botToken) ? substr($botToken, 0, 10) . "..." : "MISSING") . "\n";
-
-        $profileManager = new ProfileFieldManager();
-        echo "🔧 ProfileFieldManager instantiated\n";
-
-        // تشخیص state کاربر
-        $isMain = ($user->state == 'uploading_main_photo');
-        echo "🎯 Upload type: " . ($isMain ? "Main Photo" : "Additional Photo") . "\n";
-
-        try {
-            echo "🔄 Calling handlePhotoUpload...\n";
-            $uploadResult = $profileManager->handlePhotoUpload($user, $photo, $botToken, $isMain);
-            echo "📊 Upload result: " . ($uploadResult ? "SUCCESS" : "FAILED") . "\n";
-
-            if ($uploadResult) {
-                echo "✅ Sending success message\n";
-                $this->sendMessage($user->telegram_id, "✅ عکس با موفقیت آپلود شد!");
-
-                if ($isMain) {
-                    echo "🔄 Showing profile menu\n";
-                    $this->showProfileMenu($user, $user->telegram_id);
-                } else {
-                    echo "🔄 Asking for more photos\n";
-                    $this->askForMorePhotos($user);
-                }
-            } else {
-                echo "❌ Sending error message\n";
-                $this->sendMessage($user->telegram_id, "❌ خطا در آپلود عکس. لطفاً مجدداً تلاش کنید.");
-            }
-            return true;
-        } catch (Exception $e) {
-            echo "🔴 Exception in handlePhotoMessage: " . $e->getMessage() . "\n";
-            $this->sendMessage($user->telegram_id, "❌ خطا در پردازش عکس: " . $e->getMessage());
-            return false;
-        }
-    }
+    $chatId = $user->telegram_id;
     
-    echo "❌ No photo found in message\n";
-    return false;
+    error_log("🖼️ handlePhotoMessage called - User: {$user->id}, State: {$user->state}");
+
+    if (!isset($message['photo'])) {
+        error_log("❌ No photo found in message");
+        $this->sendMessage($chatId, "❌ هیچ عکسی در پیام یافت نشد.");
+        return false;
+    }
+
+    error_log("📸 Photo array structure:");
+    foreach ($message['photo'] as $index => $photoSize) {
+        error_log("  [$index] file_id: " . ($photoSize['file_id'] ?? 'NOT FOUND'));
+    }
+
+    $photo = end($message['photo']); // بزرگترین سایز
+    $botToken = $this->getBotToken();
+
+    error_log("🎯 Selected largest photo - file_id: " . ($photo['file_id'] ?? 'NOT FOUND'));
+    error_log("🔑 Bot Token: " . (!empty($botToken) ? substr($botToken, 0, 10) . "..." : "MISSING"));
+
+    $profileManager = new ProfileFieldManager();
+    error_log("🔧 ProfileFieldManager instantiated");
+
+    // تشخیص state کاربر
+    $isMain = ($user->state == 'uploading_main_photo');
+    error_log("🎯 Upload type: " . ($isMain ? "Main Photo" : "Additional Photo"));
+
+    try {
+        error_log("🔄 Calling handlePhotoUpload...");
+        $uploadResult = $profileManager->handlePhotoUpload($user, $photo, $botToken, $isMain);
+        error_log("📊 Upload result: " . ($uploadResult ? "SUCCESS" : "FAILED"));
+
+        if ($uploadResult) {
+            error_log("✅ Sending success message");
+            $this->sendMessage($chatId, "✅ عکس با موفقیت آپلود شد!");
+
+            if ($isMain) {
+                error_log("🔄 Showing profile menu");
+                $this->showProfileMenu($user, $chatId);
+            } else {
+                error_log("🔄 Asking for more photos");
+                $this->askForMorePhotos($user);
+            }
+        } else {
+            error_log("❌ Sending error message");
+            $this->sendMessage($chatId, "❌ خطا در آپلود عکس. لطفاً مجدداً تلاش کنید.");
+        }
+        return true;
+    } catch (Exception $e) {
+        error_log("🔴 Exception in handlePhotoMessage: " . $e->getMessage());
+        $this->sendMessage($chatId, "❌ خطا در پردازش عکس: " . $e->getMessage());
+        return false;
+    }
 }
     private function getBotToken()
     {
@@ -6064,35 +6142,35 @@ case 'back_to_main_from_photos':
 
 
     private function askForMorePhotos($user)
-{
-    echo "🔄 askForMorePhotos called\n";
-    
-    $message = "✅ عکس با موفقیت آپلود شد!\n\n";
-    $message .= "آیا می‌خواهید عکس دیگری آپلود کنید؟\n\n";
-    $message .= "می‌توانید عکس‌های بیشتری آپلود کنید یا یک عکس را به عنوان اصلی انتخاب کنید.";
-    
-    // ایجاد دکمه‌های شیشه‌ای (Inline Keyboard)
-    $inlineKeyboard = [
-        
-        [
-            ['text' => '📷 آپلود عکس دیگر', 'callback_data' => 'upload_more_photos']
-        ],
-        [
-            ['text' => '⭐ انتخاب عکس اصلی', 'callback_data' => 'select_main_photo_menu'],
-            ['text' => '👀 مشاهده عکس‌ها', 'callback_data' => 'view_all_photos']
-        ],
-        [
-            ['text' => '🏠 بازگشت به منوی اصلی', 'callback_data' => 'back_to_main_from_photos']
-        ]
-    ];
-    
-    // $replyMarkup = [
-    //     'inline_keyboard' => $inlineKeyboard
-    // ];
-    
-    $this->sendMessage($user->telegram_id, $message, null, $inlineKeyboard);
-    $this->updateUserState($user->telegram_id, 'managing_photos');
-}
+    {
+        echo "🔄 askForMorePhotos called\n";
+
+        $message = "✅ عکس با موفقیت آپلود شد!\n\n";
+        $message .= "آیا می‌خواهید عکس دیگری آپلود کنید؟\n\n";
+        $message .= "می‌توانید عکس‌های بیشتری آپلود کنید یا یک عکس را به عنوان اصلی انتخاب کنید.";
+
+        // ایجاد دکمه‌های شیشه‌ای (Inline Keyboard)
+        $inlineKeyboard = [
+
+            [
+                ['text' => '📷 آپلود عکس دیگر', 'callback_data' => 'upload_more_photos']
+            ],
+            [
+                ['text' => '⭐ انتخاب عکس اصلی', 'callback_data' => 'select_main_photo_menu'],
+                ['text' => '👀 مشاهده عکس‌ها', 'callback_data' => 'view_all_photos']
+            ],
+            [
+                ['text' => '🏠 بازگشت به منوی اصلی', 'callback_data' => 'back_to_main_from_photos']
+            ]
+        ];
+
+        // $replyMarkup = [
+        //     'inline_keyboard' => $inlineKeyboard
+        // ];
+
+        $this->sendMessage($user->telegram_id, $message, null, $inlineKeyboard);
+        $this->updateUserState($user->telegram_id, 'managing_photos');
+    }
 
 
 
@@ -6122,7 +6200,7 @@ case 'back_to_main_from_photos':
                 ['text' => '📷 مدیریت عکس‌های پروفایل', 'callback_data' => 'manage_photos']
             ],
             [
-                 ['text' => '✏️ ویرایش پروفایل', 'callback_data' => 'profile_edit_start'],
+                ['text' => '✏️ ویرایش پروفایل', 'callback_data' => 'profile_edit_start'],
                 ['text' => '🏠 بازگشت به منوی اصلی', 'callback_data' => 'back_to_main']
             ]
         ];
@@ -6135,75 +6213,75 @@ case 'back_to_main_from_photos':
     }
 
     private function showPhotoManagementMenu($user, $chatId)
-{
-    try {
-        $pdo = $this->getPDO();
-        $sql = "SELECT profile_photo, profile_photos FROM users WHERE telegram_id = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$user->telegram_id]);
-        $userData = $stmt->fetch(\PDO::FETCH_ASSOC);
-        
-        $mainPhoto = $userData['profile_photo'] ?? null;
-        
-        // 🔥 اصلاح: اطمینان از اینکه allPhotos همیشه آرایه است
-        $allPhotos = [];
-        if (!empty($userData['profile_photos'])) {
-            $decoded = json_decode($userData['profile_photos'], true);
-            if (is_array($decoded)) {
-                $allPhotos = $decoded;
+    {
+        try {
+            $pdo = $this->getPDO();
+            $sql = "SELECT profile_photo, profile_photos FROM users WHERE telegram_id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$user->telegram_id]);
+            $userData = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            $mainPhoto = $userData['profile_photo'] ?? null;
+
+            // 🔥 اصلاح: اطمینان از اینکه allPhotos همیشه آرایه است
+            $allPhotos = [];
+            if (!empty($userData['profile_photos'])) {
+                $decoded = json_decode($userData['profile_photos'], true);
+                if (is_array($decoded)) {
+                    $allPhotos = $decoded;
+                }
             }
-        }
-        
-        // 🔥 اصلاح: استفاده از count فقط روی آرایه
-        $totalPhotos = count($allPhotos) + ($mainPhoto ? 1 : 0);
-        
-        $message = "📷 مدیریت عکس‌های پروفایل\n\n";
-        $message .= "عکس اصلی: " . ($mainPhoto ? "✅ تنظیم شده" : "❌ تنظیم نشده") . "\n";
-        $message .= "تعداد عکس‌ها: " . $totalPhotos . "\n\n";
-        $message .= "گزینه مورد نظر را انتخاب کنید:";
-        
-        $inlineKeyboard = [];
-        
-        if (empty($allPhotos) && !$mainPhoto) {
-            // اگر هیچ عکسی ندارد
-            $inlineKeyboard[] = [
-                ['text' => '📤 آپلود اولین عکس', 'callback_data' => 'upload_first_photo']
-            ];
-        } else {
-            // اگر حداقل یک عکس دارد
-            $inlineKeyboard[] = [
-                ['text' => '📤 آپلود عکس جدید', 'callback_data' => 'upload_new_photo']
-            ];
-            
-            if (count($allPhotos) > 0) {
+
+            // 🔥 اصلاح: استفاده از count فقط روی آرایه
+            $totalPhotos = count($allPhotos) + ($mainPhoto ? 1 : 0);
+
+            $message = "📷 مدیریت عکس‌های پروفایل\n\n";
+            $message .= "عکس اصلی: " . ($mainPhoto ? "✅ تنظیم شده" : "❌ تنظیم نشده") . "\n";
+            $message .= "تعداد عکس‌ها: " . $totalPhotos . "\n\n";
+            $message .= "گزینه مورد نظر را انتخاب کنید:";
+
+            $inlineKeyboard = [];
+
+            if (empty($allPhotos) && !$mainPhoto) {
+                // اگر هیچ عکسی ندارد
                 $inlineKeyboard[] = [
-                    ['text' => '⭐ انتخاب عکس اصلی', 'callback_data' => 'select_main_photo']
+                    ['text' => '📤 آپلود اولین عکس', 'callback_data' => 'upload_first_photo']
                 ];
-            }
-            
-            if ($mainPhoto || count($allPhotos) > 0) {
+            } else {
+                // اگر حداقل یک عکس دارد
                 $inlineKeyboard[] = [
-                    ['text' => '👀 مشاهده عکس‌ها', 'callback_data' => 'view_photos']
+                    ['text' => '📤 آپلود عکس جدید', 'callback_data' => 'upload_new_photo']
                 ];
+
+                if (count($allPhotos) > 0) {
+                    $inlineKeyboard[] = [
+                        ['text' => '⭐ انتخاب عکس اصلی', 'callback_data' => 'select_main_photo']
+                    ];
+                }
+
+                if ($mainPhoto || count($allPhotos) > 0) {
+                    $inlineKeyboard[] = [
+                        ['text' => '👀 مشاهده عکس‌ها', 'callback_data' => 'view_photos']
+                    ];
+                }
             }
+
+            $inlineKeyboard[] = [
+                ['text' => '↩️ بازگشت به منوی پروفایل', 'callback_data' => 'back_to_profile_menu']
+            ];
+
+            $replyMarkup = [
+                'inline_keyboard' => $inlineKeyboard
+            ];
+
+            $this->sendMessage($chatId, $message, null, $replyMarkup);
+            $this->updateUserState($user->telegram_id, 'photo_management');
+
+        } catch (\Exception $e) {
+            echo "❌ Error in showPhotoManagementMenu: " . $e->getMessage() . "\n";
+            $this->sendMessage($chatId, "❌ خطا در بارگذاری منوی عکس‌ها.");
         }
-        
-        $inlineKeyboard[] = [
-            ['text' => '↩️ بازگشت به منوی پروفایل', 'callback_data' => 'back_to_profile_menu']
-        ];
-        
-        $replyMarkup = [
-            'inline_keyboard' => $inlineKeyboard
-        ];
-        
-        $this->sendMessage($chatId, $message, null, $replyMarkup);
-        $this->updateUserState($user->telegram_id, 'photo_management');
-        
-    } catch (\Exception $e) {
-        echo "❌ Error in showPhotoManagementMenu: " . $e->getMessage() . "\n";
-        $this->sendMessage($chatId, "❌ خطا در بارگذاری منوی عکس‌ها.");
     }
-}
     private function getPhotoUrl($photoFilename)
     {
         return "http://yourdomain.com/dating_bot/storage/profile_photos/" . $photoFilename;
@@ -6375,47 +6453,47 @@ case 'back_to_main_from_photos':
      * بروزرسانی state کاربر در دیتابیس
      */
     private function updateUserState($telegramId, $state)
-{
-    try {
-        $pdo = $this->getPDO();
-        $sql = "UPDATE users SET state = ? WHERE telegram_id = ?";
-        $stmt = $pdo->prepare($sql);
-        $result = $stmt->execute([$state, $telegramId]);
-        
-        echo "✅ User state updated to: $state - Result: " . ($result ? "SUCCESS" : "FAILED") . "\n";
-        return $result;
-        
-    } catch (\Exception $e) {
-        echo "❌ Error updating user state: " . $e->getMessage() . "\n";
-        return false;
+    {
+        try {
+            $pdo = $this->getPDO();
+            $sql = "UPDATE users SET state = ? WHERE telegram_id = ?";
+            $stmt = $pdo->prepare($sql);
+            $result = $stmt->execute([$state, $telegramId]);
+
+            echo "✅ User state updated to: $state - Result: " . ($result ? "SUCCESS" : "FAILED") . "\n";
+            return $result;
+
+        } catch (\Exception $e) {
+            echo "❌ Error updating user state: " . $e->getMessage() . "\n";
+            return false;
+        }
     }
-}
     /**
      * پیدا کردن کاربر بر اساس telegram_id
      */
     private function findUserByTelegramId($telegramId)
-{
-    try {
-        $pdo = $this->getPDO();
-        $sql = "SELECT * FROM users WHERE telegram_id = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$telegramId]);
-        $userData = $stmt->fetch(\PDO::FETCH_ASSOC);
-        
-        if ($userData) {
-            $user = new \stdClass();
-            foreach ($userData as $key => $value) {
-                $user->$key = $value;
+    {
+        try {
+            $pdo = $this->getPDO();
+            $sql = "SELECT * FROM users WHERE telegram_id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$telegramId]);
+            $userData = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if ($userData) {
+                $user = new \stdClass();
+                foreach ($userData as $key => $value) {
+                    $user->$key = $value;
+                }
+                return $user;
             }
-            return $user;
+            return null;
+
+        } catch (\Exception $e) {
+            error_log("Error finding user: " . $e->getMessage());
+            return null;
         }
-        return null;
-        
-    } catch (\Exception $e) {
-        error_log("Error finding user: " . $e->getMessage());
-        return null;
     }
-}
     /**
      * ایجاد کاربر جدید
      */
@@ -6461,96 +6539,118 @@ case 'back_to_main_from_photos':
 
         return true;
     }
-   private function processMessage($message)
-{
-    $chatId = $message['chat']['id'];
-    $user = $this->findOrCreateUser($message['from'], $chatId);
-    
-    echo "📨 Process Message - Chat: $chatId, User State: {$user->state}\n";
-    echo "🔍 Message structure: " . json_encode(array_keys($message)) . "\n";
-    
-    // دیباگ کامل برای عکس
-    if (isset($message['photo'])) {
-        echo "🎯 PHOTO DIRECTLY FOUND in message['photo']\n";
-        echo "📸 Photo array count: " . count($message['photo']) . "\n";
-        return $this->handlePhotoMessage($user, $message);
-    }
-    
-    // بررسی ساختارهای مختلف تلگرام
-    if (isset($message['message']['photo'])) {
-        echo "🎯 PHOTO FOUND in message['message']['photo']\n";
-        return $this->handlePhotoMessage($user, $message['message']);
-    }
-    
-    // اگر update از نوع message است
-    if (isset($message['message']) && isset($message['message']['photo'])) {
-        echo "🎯 PHOTO FOUND in update->message->photo\n";
-        return $this->handlePhotoMessage($user, $message['message']);
-    }
-    
-    echo "❌ NO PHOTO detected in any structure\n";
-    
-    $text = $message['text'] ?? ($message['message']['text'] ?? '');
-    
-    // بقیه پردازش برای متن
-    if (!empty($text)) {
-        if (isset($user->state)) {
-            return $this->handleProfileState($text, $user, $chatId, $message);
+    private function processMessage($message)
+    {
+        $chatId = $message['chat']['id'];
+        $user = $this->findOrCreateUser($message['from'], $chatId);
+
+        echo "📨 Process Message - Chat: $chatId, User State: {$user->state}\n";
+        echo "🔍 Message structure: " . json_encode(array_keys($message)) . "\n";
+
+        // دیباگ کامل برای عکس
+        if (isset($message['photo'])) {
+            echo "🎯 PHOTO DIRECTLY FOUND in message['photo']\n";
+            echo "📸 Photo array count: " . count($message['photo']) . "\n";
+            return $this->handlePhotoMessage($user, $message);
         }
-        return $this->handleTextCommand($text, $user, $chatId);
+
+        // بررسی ساختارهای مختلف تلگرام
+        if (isset($message['message']['photo'])) {
+            echo "🎯 PHOTO FOUND in message['message']['photo']\n";
+            return $this->handlePhotoMessage($user, $message['message']);
+        }
+
+        // اگر update از نوع message است
+        if (isset($message['message']) && isset($message['message']['photo'])) {
+            echo "🎯 PHOTO FOUND in update->message->photo\n";
+            return $this->handlePhotoMessage($user, $message['message']);
+        }
+
+        echo "❌ NO PHOTO detected in any structure\n";
+
+        $text = $message['text'] ?? ($message['message']['text'] ?? '');
+
+        // بقیه پردازش برای متن
+        if (!empty($text)) {
+            if (isset($user->state)) {
+                return $this->handleProfileState($text, $user, $chatId, $message);
+            }
+            return $this->handleTextCommand($text, $user, $chatId);
+        }
+
+        return false;
     }
-    
-    return false;
-}
-private function getLastUpdateId()
-{
-    $filePath = __DIR__ . '/../../storage/last_update_id.txt';
-    
-    if (file_exists($filePath)) {
-        $lastUpdateId = (int) file_get_contents($filePath);
-        echo "📄 Last Update ID from file: $lastUpdateId\n";
-        return $lastUpdateId;
+    private function getLastUpdateId()
+    {
+        $filePath = __DIR__ . '/../../storage/last_update_id.txt';
+
+        if (file_exists($filePath)) {
+            $lastUpdateId = (int) file_get_contents($filePath);
+            echo "📄 Last Update ID from file: $lastUpdateId\n";
+            return $lastUpdateId;
+        }
+
+        echo "📄 Last Update ID file not found, returning 0\n";
+        return 0;
     }
-    
-    echo "📄 Last Update ID file not found, returning 0\n";
-    return 0;
-}
-private function saveLastUpdateId($updateId)
-{
-    $filePath = __DIR__ . '/../../storage/last_update_id.txt';
-    $dir = dirname($filePath);
-    
-    // ایجاد پوشه اگر وجود ندارد
-    if (!file_exists($dir)) {
-        mkdir($dir, 0755, true);
+    private function saveLastUpdateId($updateId)
+    {
+        $filePath = __DIR__ . '/../../storage/last_update_id.txt';
+        $dir = dirname($filePath);
+
+        // ایجاد پوشه اگر وجود ندارد
+        if (!file_exists($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        file_put_contents($filePath, $updateId);
+        echo "💾 Saved Last Update ID: $updateId\n";
     }
-    
-    file_put_contents($filePath, $updateId);
-    echo "💾 Saved Last Update ID: $updateId\n";
-}
-private function getUpdates($offset = 0, $limit = 100, $timeout = 0)
-{
-    $token = $this->getBotToken();
-    $url = "https://api.telegram.org/bot{$token}/getUpdates?offset={$offset}&limit={$limit}&timeout={$timeout}";
-    
-    echo "🌐 Calling Telegram API: $url\n";
-    
-    $response = file_get_contents($url);
-    if ($response === false) {
-        echo "❌ Failed to get updates from Telegram\n";
-        return [];
+    private function getUpdates($offset = 0, $limit = 100, $timeout = 0)
+    {
+        $token = $this->getBotToken();
+        $url = "https://api.telegram.org/bot{$token}/getUpdates?offset={$offset}&limit={$limit}&timeout={$timeout}";
+
+        echo "🌐 Calling Telegram API: $url\n";
+
+        $response = file_get_contents($url);
+        if ($response === false) {
+            echo "❌ Failed to get updates from Telegram\n";
+            return [];
+        }
+
+        $data = json_decode($response, true);
+
+        if (!$data || !$data['ok']) {
+            echo "❌ Telegram API error: " . ($data['description'] ?? 'Unknown error') . "\n";
+            return [];
+        }
+
+        $updates = $data['result'] ?? [];
+        echo "📥 Got " . count($updates) . " update(s) from Telegram\n";
+
+        return $updates;
     }
-    
-    $data = json_decode($response, true);
-    
-    if (!$data || !$data['ok']) {
-        echo "❌ Telegram API error: " . ($data['description'] ?? 'Unknown error') . "\n";
-        return [];
+    private function findSuggestedUserId($user, $chatId)
+    {
+        error_log("🔍 Finding suggested user ID for user: {$user->id}, state: {$user->state}");
+        error_log("🎯 findSuggestedUserId called");
+        error_log("📊 User ID: {$user->id}");
+        error_log("📋 User State: '{$user->state}'");
+        error_log("🔍 Checking if state starts with 'viewing_suggestion:'");
+
+        // فقط از state استفاده کن - راه حل موقت
+        if (str_starts_with($user->state, 'viewing_suggestion:')) {
+            $parts = explode(':', $user->state);
+            if (count($parts) >= 2 && is_numeric($parts[1])) {
+                $suggestedUserId = intval($parts[1]);
+                error_log("✅ Found suggested user ID from state: {$suggestedUserId}");
+                return $suggestedUserId;
+            }
+        }
+
+        error_log("❌ No suggested user ID found in state");
+        return null;
     }
-    
-    $updates = $data['result'] ?? [];
-    echo "📥 Got " . count($updates) . " update(s) from Telegram\n";
-    
-    return $updates;
-}
+
 }
