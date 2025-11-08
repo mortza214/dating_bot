@@ -5,12 +5,17 @@ class TelegramAPI
 {
     private $token;
     private $apiUrl;
+    protected $baseUrl; // 🔴 این خط باید وجود داشته باشد
 
     public function __construct($token)
     {
         $this->token = $token;
         $this->apiUrl = "https://api.telegram.org/bot{$token}/";
     }
+    public function getBotToken()
+{
+    return $this->token;
+}
 
     public function sendMessage($chatId, $text, $replyMarkup = null)
     {
@@ -27,7 +32,53 @@ class TelegramAPI
 
         return $this->request('sendMessage', $data);
     }
+private function makeRequest($url, $data)
+{
+    error_log("🌐 Making request to: " . $url);
+    
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    
+    // برای دیباگ بیشتر
+    curl_setopt($ch, CURLOPT_VERBOSE, true);
+    $verbose = fopen('php://temp', 'w+');
+    curl_setopt($ch, CURLOPT_STDERR, $verbose);
 
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    
+    if (curl_error($ch)) {
+        $error = curl_error($ch);
+        error_log('❌ CURL Error: ' . $error);
+        
+        // خواندن اطلاعات verbose برای دیباگ
+        rewind($verbose);
+        $verboseLog = stream_get_contents($verbose);
+        error_log("🔍 CURL Verbose: " . $verboseLog);
+        
+        curl_close($ch);
+        fclose($verbose);
+        return false;
+    }
+    
+    curl_close($ch);
+    fclose($verbose);
+
+    error_log("📡 Response HTTP Code: " . $httpCode);
+
+    if ($httpCode !== 200) {
+        error_log("❌ Telegram API Error: HTTP {$httpCode} - Response: {$response}");
+        return false;
+    }
+
+    error_log("✅ Request successful");
+    return $response;
+}
     public function getUpdates($offset = null)
     {
         $data = [];
@@ -105,21 +156,38 @@ class TelegramAPI
         return $result;
     }
 
-    public function sendPhoto($chatId, $photo, $caption = '')
-    {
-        $url = $this->baseUrl . 'sendPhoto';
-        $data = [
-            'chat_id' => $chatId,
-            'photo' => $photo,
-            'caption' => $caption,
-            'parse_mode' => 'Markdown'
-        ];
+    public function sendPhoto($chatId, $photo, $caption = null, $replyMarkup = null)
+{
+    // 🔴 مطمئن شو baseUrl درست ساخته شده است
+    if (empty($this->baseUrl)) {
+        $this->baseUrl = 'https://api.telegram.org/bot' . $this->token . '/';
+    }
+    
+    $url = $this->baseUrl . 'sendPhoto';
+    
+    error_log("📤 Sending photo to URL: " . $url);
+    error_log("📸 Photo file_id: " . $photo);
+    error_log("💬 Chat ID: " . $chatId);
 
-        $result = $this->sendRequest($url, $data);
-        error_log("📡 پاسخ sendPhoto: " . json_encode($result));
-        return $result;
+    $data = [
+        'chat_id' => $chatId,
+        'photo' => $photo
+    ];
+
+    if ($caption) {
+        $data['caption'] = $caption;
+        $data['parse_mode'] = 'Markdown';
     }
 
+    if ($replyMarkup) {
+        $data['reply_markup'] = json_encode($replyMarkup);
+    }
+
+    $response = $this->makeRequest($url, $data);
+    error_log("📡 Photo send response: " . $response);
+    
+    return $response;
+}
     private function sendRequest($url, $data)
     {
         $ch = curl_init();

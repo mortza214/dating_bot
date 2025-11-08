@@ -16,6 +16,8 @@ use App\Models\UserFilter;
 use App\Models\UserSuggestion;
 use App\Models\SystemFilter;
 use App\Models\Referral;
+use App\Core\UpdateManager;
+use App\Core\DatabaseManage;
 
 use Exception;
 
@@ -29,11 +31,19 @@ class BotCore
 
     public function __construct()
     {
-        $this->telegram = new TelegramAPI($_ENV['TELEGRAM_BOT_TOKEN']);
+        // 🔴 مطمئن شو updateManager مقداردهی شده است
         $this->updateManager = new UpdateManager();
-        // 🔴 اجرای بهینه‌سازی دیتابیس هنگام راه‌اندازی
-        $this->optimizeDatabase();
+
+        $token = $_ENV['TELEGRAM_BOT_TOKEN'] ?? null;
+        $this->telegram = new TelegramAPI($token);
+
+        if (!$token) {
+            throw new \Exception('TELEGRAM_BOT_TOKEN is not set in .env file');
+        }
+
+        error_log("🤖 BotCore initialized successfully");
     }
+
     private function optimizeDatabase()
     {
         // جلوگیری از اجرای مکرر
@@ -103,8 +113,17 @@ class BotCore
 
     public function handleUpdate()
     {
+        $this->performHealthCheck();
         try {
+            // 🔴 اضافه کردن چک برای updateManager
+            if (!$this->updateManager) {
+                error_log("⚠️ updateManager is null, initializing...");
+                $this->updateManager = new UpdateManager();
+            }
+
             $lastUpdateId = $this->updateManager->getLastUpdateId();
+            error_log("📡 Getting updates from ID: " . ($lastUpdateId + 1));
+
             $updates = $this->telegram->getUpdates($lastUpdateId + 1);
 
             if ($updates && $updates['ok'] && !empty($updates['result'])) {
@@ -112,37 +131,77 @@ class BotCore
                     $this->processUpdate($update);
                     $this->updateManager->saveLastUpdateId($update['update_id']);
                 }
+
                 echo "✅ Processed " . count($updates['result']) . " update(s)\n";
+            } else {
+                if ($updates && !$updates['ok']) {
+                    error_log("❌ Telegram API error: " . ($updates['description'] ?? 'Unknown error'));
+                }
+                echo "⏳ No new updates\n";
             }
 
         } catch (\Exception $e) {
-            error_log("Bot Error: " . $e->getMessage());
+            error_log("❌ Bot Error: " . $e->getMessage());
+            echo "❌ Error: " . $e->getMessage() . "\n";
+
+            // 🔴 اگر خطا از updateManager است، بدون آن ادامه بده
+            if (strpos($e->getMessage(), 'updateManager') !== false) {
+                error_log("🔄 Continuing without updateManager...");
+                $this->handleUpdateWithoutManager();
+            }
+        }
+    }
+    private function handleUpdateWithoutManager()
+    {
+        try {
+            error_log("🔄 Handling updates without updateManager");
+
+            // استفاده از offset 0 برای گرفتن آخرین آپدیت
+            $updates = $this->telegram->getUpdates();
+
+            if ($updates && $updates['ok'] && !empty($updates['result'])) {
+                foreach ($updates['result'] as $update) {
+                    $this->processUpdate($update);
+                }
+                echo "✅ Processed " . count($updates['result']) . " update(s) without manager\n";
+            } else {
+                echo "⏳ No new updates (without manager)\n";
+            }
+
+        } catch (\Exception $e) {
+            error_log("❌ Error in handleUpdateWithoutManager: " . $e->getMessage());
         }
     }
     private function processUpdate($update)
     {
         if (isset($update['message'])) {
             $message = $update['message'];
-               $chatId = $message['chat']['id'];
+            $chatId = $message['chat']['id'];
 
-             $user = User::where('telegram_id', $chatId)->first();
-        
-        if (!$user) {
-            $this->handleStartCommand($message);
-            return;
-        }
+            // پیدا کردن کاربر با مدیریت خطا
+            $user = $this->findUserSafely($chatId);
 
-            if (isset($message['text'])) {
-                $this->handleMessage($message);
-            } elseif (isset($message['photo'])) {
+            if (!$user) {
+                $this->handleStartCommand($message);
+                return;
+            }
+
+            if (isset($message['photo'])) {
                 $this->handlePhotoMessage($user, $message);
-              
+            } elseif (isset($message['text'])) {
+                $this->handleMessage($message);
             }
         } elseif (isset($update['callback_query'])) {
-            $this->processCallbackQuery($update['callback_query']);
+            $callbackQuery = $update['callback_query'];
+            $chatId = $callbackQuery['message']['chat']['id'];
+
+            $user = $this->findUserSafely($chatId);
+
+            if ($user) {
+                $this->processCallbackQuery($callbackQuery);
+            }
         }
     }
-
     private function findOrCreateUser($from, $chatId = null)
     {
         $telegramId = $from['id'];
@@ -270,14 +329,18 @@ class BotCore
 
         switch ($text) {
             case '/start':
-                $this->handleStartCommand($message);
+                $this->showMainMenu($user, $chatId);
                 break;
             case '📜 تاریخچه درخواست‌ها':
                 $this->showContactHistory($user, $chatId);
                 break;
-            case '💌 دریافت پیشنهاد':
-                $this->handleGetSuggestion($user, $chatId);
+            case '📜 بازگشت به تاریخچه':
+                error_log("📜 Returning to contact history");
+                $this->showContactHistory($user, $chatId);
                 break;
+            // case '💌 دریافت پیشنهاد':
+            //     $this->handleGetSuggestion($user, $chatId);
+            //     break;
             case '⚙️ تنظیمات':
                 $this->showSettingsMenu($user, $chatId);
                 break;
@@ -290,10 +353,46 @@ class BotCore
             case '📊 پروفایل من':
                 $this->showProfile($user, $chatId);
                 break;
+            case '🔙 بازگشت به پروفایل':
+                $this->showProfile($user, $chatId);
+                break;
+            case '📊مدیریت  پروفایل  ':
+                $this->showProfileMenu($user, $chatId);
+                break;
+            case '✏️ ویرایش پروفایل':
+                $this->startProfileEdit($user, $chatId);
+                break;
+
+
+
+
+            case '💼 کیف پول':
+                error_log("💼 Calling handleWallet");
+                $this->handleWallet($user, $chatId);
+                break;
+
             case '🔙 بازگشت':
                 $this->showMainMenu($user, $chatId);
                 break;
+            case '🔙 بازگشت به منوی اصلی':
+                error_log("🔙 Returning to main menu");
+                $user->update(['state' => 'main_menu']);
+                $this->showMainMenu($user, $chatId);
+                break;
+            case '🔙 منوی اصلی':
+                error_log("🔙 Returning to main menu from contact info");
+                $this->showMainMenu($user, $chatId);
+                break;
             default:
+
+            case '📸 آپلود عکس پروفایل':
+                error_log("📸 Requesting profile photo upload");
+                $this->requestProfilePhoto($user, $chatId);
+                break;
+            case '🔙 انصراف':
+                error_log("🔙 Cancelling photo upload");
+                $this->showProfile($user, $chatId);
+                break;
                 // اگر دستور شناخته شده نیست، منوی اصلی نشان داده شود
                 $this->showMainMenu($user, $chatId);
             case '💌 دریافت پیشنهاد':
@@ -339,7 +438,7 @@ class BotCore
                 $this->handleGetSuggestion($user, $chatId);
                 break;
 
-          
+
         }
     }
     public function processCallbackQuery($callbackQuery)
@@ -1177,19 +1276,18 @@ class BotCore
         $message .= "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:";
 
         $keyboard = [
-            'inline_keyboard' => [
+            'keyboard' => [
                 [
-                    ['text' => '📝 پروفایل من', 'callback_data' => 'profile'],
-                    ['text' => '🎛️ تنظیمات فیلتر', 'callback_data' => 'edit_filters']
+                    ['text' => '💼 کیف پول'],
+                    ['text' => '🎛️ تنظیمات فیلتر']
                 ],
                 [
-                    ['text' => '💼 کیف پول', 'callback_data' => 'wallet']
 
-                ],
-                [
-                    ['text' => '🔙 بازگشت به منوی اصلی', 'callback_data' => 'main_menu']
+                    ['text' => '🔙 بازگشت به منوی اصلی']
                 ]
-            ]
+            ],
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
         ];
 
         $this->telegram->sendMessage($chatId, $message, $keyboard);
@@ -1481,7 +1579,7 @@ class BotCore
 
         // بعد از 2 ثانیه منوی اصلی را نشان بده
         sleep(2);
-        $this->showprofilemenu($user, $chatId);
+        $this->showprofile($user, $chatId);
     }
 
     // متد جدید برای پیدا کردن فیلدهای اجباری خالی
@@ -1589,25 +1687,57 @@ class BotCore
 
         $message .= "\n📊 وضعیت: " . ($user->is_profile_completed ? "✅ تکمیل شده" : "⚠️ ناقص");
 
-        $keyboard = [
-            'inline_keyboard' => [
-                [
-                    ['text' => '✏️ ویرایش پروفایل', 'callback_data' => 'back_to_profile_menu'],
-                    ['text' => '📷 مدیریت عکس‌ها', 'callback_data' => 'managing_photos'],
-                    ['text' => '🔙 بازگشت', 'callback_data' => 'profile']
-                ]
-            ]
-        ];
+        if ($user->telegram_photo_id) {
+            // کیبورد برای حالت دارای عکس
+            $keyboardWithPhoto = [
+                'keyboard' => [
+                    [
+                        ['text' => '✏️ ویرایش پروفایل'],
+                        ['text' => '🔄 تغییر عکس پروفایل']
 
-        // اگر کاربر عکس پروفایل دارد، عکس را به همراه متن ارسال کن
-        if (!empty($user->profile_photo)) {
-            $photoUrl = $this->getProfilePhotoUrl($user->profile_photo);
-            $this->telegram->sendPhoto($chatId, $photoUrl, $message, $keyboard);
+                    ],
+
+                    [['text' => '🔙 بازگشت به منوی اصلی']]
+                ],
+                'resize_keyboard' => true,
+                'one_time_keyboard' => false
+            ];
+
+            // 🔴 Escape کردن متن برای جلوگیری از خطای Markdown
+            $escapedMessage = $this->escapeMarkdown($message);
+
+            // نمایش عکس پروفایل با کیبورد
+            $this->telegram->sendPhoto($chatId, $user->telegram_photo_id, $escapedMessage, $keyboardWithPhoto);
         } else {
+            $message .= "\n📷 شما هنوز عکس پروفایل تنظیم نکرده‌اید.";
+
+            $keyboard = [
+                'keyboard' => [
+                    [['text' => '✏️ ویرایش پروفایل']],
+                    [['text' => '📸 آپلود عکس پروفایل']],
+                    [['text' => '🔙 بازگشت به منوی اصلی']]
+                ],
+                'resize_keyboard' => true,
+                'one_time_keyboard' => false
+            ];
+
             $this->telegram->sendMessage($chatId, $message, $keyboard);
         }
     }
+    /**
+     * Escape کردن کاراکترهای خاص Markdown برای جلوگیری از خطای parsing
+     */
+    private function escapeMarkdown($text)
+    {
+        // کاراکترهای خاص Markdown که نیاز به escape دارند
+        $specialChars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
 
+        foreach ($specialChars as $char) {
+            $text = str_replace($char, '\\' . $char, $text);
+        }
+
+        return $text;
+    }
     // متد کمکی برای گرفتن آدرس کامل عکس پروفایل
     private function getProfilePhotoUrl($photoFilename)
     {
@@ -3845,7 +3975,7 @@ class BotCore
         $shownCount = \App\Models\UserSuggestion::getShownCount($user->id, $suggestedUser->id);
         $message .= "\n⭐ این فرد {$shownCount} بار برای شما نمایش داده شده است.";
 
-        // 🔴 فقط دکمه درخواست اطلاعات به صورت اینلاین (شیشه‌ای)
+        // 🔴 دکمه درخواست اطلاعات به صورت اینلاین
         $inlineKeyboard = [
             'inline_keyboard' => [
                 [
@@ -3869,11 +3999,22 @@ class BotCore
             'one_time_keyboard' => false
         ];
 
-        // اول پیام با دکمه اینلاین بفرست
-        $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
+        if ($suggestedUser->telegram_photo_id) {
+            try {
+                // 🔴 ارسال عکس و اطلاعات در یک پیام با caption
+                $this->telegram->sendPhoto($chatId, $suggestedUser->telegram_photo_id, $message, $inlineKeyboard);
+            } catch (\Exception $e) {
+                error_log("❌ Error showing suggestion with photo: " . $e->getMessage());
+                // اگر ارسال عکس با caption شکست خورد، فقط متن را نمایش بده
+                $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
+            }
+        } else {
+            // اگر کاربر عکس ندارد، فقط متن را نمایش بده
+            $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
+        }
 
-        // سپس کیبورد معمولی را تنظیم کن (اصلاح: $keyboard به $replyKeyboard)
-        $this->telegram->sendMessage($chatId, "", $replyKeyboard);
+        // ارسال کیبورد معمولی
+        $this->telegram->sendMessage($chatId, "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:", $replyKeyboard);
 
         $newState = 'viewing_suggestion:' . $suggestedUser->id;
         $user->update(['state' => $newState]);
@@ -4476,7 +4617,7 @@ class BotCore
         foreach ($activeFields as $field) {
             $value = $suggestedUser->{$field->field_name} ?? 'تعیین نشده';
 
-            // 🔴 اصلاح: تبدیل جنسیت به فارسی برای نمایش
+            // تبدیل جنسیت به فارسی برای نمایش
             if ($field->field_name === 'gender') {
                 $value = $this->convertGenderForDisplay($value);
             }
@@ -4498,19 +4639,35 @@ class BotCore
             $message .= "\n✅ این اطلاعات قبلاً توسط شما خریداری شده است.";
         }
 
+        // 🔴 کیبورد معمولی (ثابت)
         $keyboard = [
-            'inline_keyboard' => [
+            'keyboard' => [
                 [
-                    ['text' => '💌 پیشنهاد بعدی', 'callback_data' => 'get_suggestion'],
-                    ['text' => '📜 تاریخچه درخواست‌ها', 'callback_data' => 'contact_history']
+                    ['text' => '💌 پیشنهاد بعدی'],
+                    ['text' => '📜 تاریخچه درخواست‌ها']
                 ],
                 [
-                    ['text' => '🔙 منوی اصلی', 'callback_data' => 'main_menu']
+                    ['text' => '🔙 منوی اصلی']
                 ]
-            ]
+            ],
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
         ];
 
-        $this->telegram->sendMessage($chatId, $message, $keyboard);
+        // 🔴 نمایش عکس و اطلاعات در یک پیام
+        if ($suggestedUser->telegram_photo_id) {
+            try {
+                // ارسال عکس با اطلاعات به عنوان caption
+                $this->telegram->sendPhoto($chatId, $suggestedUser->telegram_photo_id, $message, $keyboard);
+            } catch (\Exception $e) {
+                error_log("❌ Error sending photo with contact info: " . $e->getMessage());
+                // اگر ارسال عکس شکست خورد، فقط متن را نمایش بده
+                $this->telegram->sendMessage($chatId, $message, $keyboard);
+            }
+        } else {
+            // اگر کاربر عکس ندارد، فقط متن را نمایش بده
+            $this->telegram->sendMessage($chatId, $message, $keyboard);
+        }
     }
     private function getContactRequestCost()
     {
@@ -4682,8 +4839,7 @@ class BotCore
             $value = $requestedUser->{$field->field_name} ?? null;
 
             if (!empty($value)) {
-
-                // 🔴 اصلاح: تبدیل جنسیت به فارسی برای نمایش
+                // تبدیل جنسیت به فارسی برای نمایش
                 if ($field->field_name === 'gender') {
                     $value = $this->convertGenderForDisplay($value);
                 }
@@ -4703,19 +4859,32 @@ class BotCore
 
         $message .= "\n💡 این اطلاعات قبلاً توسط شما خریداری شده و اکنون رایگان در دسترس شماست.";
 
+        // 🔴 کیبورد معمولی (ثابت)
         $keyboard = [
-            'inline_keyboard' => [
+            'keyboard' => [
                 [
-                    ['text' => '📜 بازگشت به تاریخچه', 'callback_data' => 'contact_history'],
-                    ['text' => '💌 پیشنهاد جدید', 'callback_data' => 'get_suggestion']
-                ],
-                [
-                    ['text' => '🔙 منوی اصلی', 'callback_data' => 'main_menu']
+                    ['text' => '📜 بازگشت به تاریخچه'],
+                    ['text' => '🔙بازگشت به منوی اصلی']
                 ]
-            ]
+            ],
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
         ];
 
-        $this->telegram->sendMessage($chatId, $message, $keyboard);
+        // 🔴 نمایش عکس و اطلاعات در یک پیام
+        if ($requestedUser->telegram_photo_id) {
+            try {
+                // ارسال عکس با اطلاعات به عنوان caption
+                $this->telegram->sendPhoto($chatId, $requestedUser->telegram_photo_id, $message, $keyboard);
+            } catch (\Exception $e) {
+                error_log("❌ Error sending photo with contact details: " . $e->getMessage());
+                // اگر ارسال عکس شکست خورد، فقط متن را نمایش بده
+                $this->telegram->sendMessage($chatId, $message, $keyboard);
+            }
+        } else {
+            // اگر کاربر عکس ندارد، فقط متن را نمایش بده
+            $this->telegram->sendMessage($chatId, $message, $keyboard);
+        }
     }
     private function showConfirmationMessage($user, $chatId, $suggestedUser, $cost)
     {
@@ -6078,63 +6247,66 @@ class BotCore
         return $user;
     }
     // در کلاس BotCore
-  public function handlePhotoMessage($user, $message)
-{
-    $chatId = $user->telegram_id;
-    
-    error_log("🖼️ handlePhotoMessage called - User: {$user->id}, State: {$user->state}");
+    // خط ~6072 - جایگزینی متد موجود
+    public function handlePhotoMessage($user, $message)
+    {
+        $chatId = $user->telegram_id;
 
-    if (!isset($message['photo'])) {
-        error_log("❌ No photo found in message");
-        $this->sendMessage($chatId, "❌ هیچ عکسی در پیام یافت نشد.");
-        return false;
-    }
+        error_log("🖼️ Processing photo upload for user: {$user->id}");
 
-    error_log("📸 Photo array structure:");
-    foreach ($message['photo'] as $index => $photoSize) {
-        error_log("  [$index] file_id: " . ($photoSize['file_id'] ?? 'NOT FOUND'));
-    }
-
-    $photo = end($message['photo']); // بزرگترین سایز
-    $botToken = $this->getBotToken();
-
-    error_log("🎯 Selected largest photo - file_id: " . ($photo['file_id'] ?? 'NOT FOUND'));
-    error_log("🔑 Bot Token: " . (!empty($botToken) ? substr($botToken, 0, 10) . "..." : "MISSING"));
-
-    $profileManager = new ProfileFieldManager();
-    error_log("🔧 ProfileFieldManager instantiated");
-
-    // تشخیص state کاربر
-    $isMain = ($user->state == 'uploading_main_photo');
-    error_log("🎯 Upload type: " . ($isMain ? "Main Photo" : "Additional Photo"));
-
-    try {
-        error_log("🔄 Calling handlePhotoUpload...");
-        $uploadResult = $profileManager->handlePhotoUpload($user, $photo, $botToken, $isMain);
-        error_log("📊 Upload result: " . ($uploadResult ? "SUCCESS" : "FAILED"));
-
-        if ($uploadResult) {
-            error_log("✅ Sending success message");
-            $this->sendMessage($chatId, "✅ عکس با موفقیت آپلود شد!");
-
-            if ($isMain) {
-                error_log("🔄 Showing profile menu");
-                $this->showProfileMenu($user, $chatId);
-            } else {
-                error_log("🔄 Asking for more photos");
-                $this->askForMorePhotos($user);
-            }
-        } else {
-            error_log("❌ Sending error message");
-            $this->sendMessage($chatId, "❌ خطا در آپلود عکس. لطفاً مجدداً تلاش کنید.");
+        if (!isset($message['photo'])) {
+            $this->telegram->sendMessage($chatId, "❌ هیچ عکسی در پیام یافت نشد.");
+            return false;
         }
-        return true;
-    } catch (Exception $e) {
-        error_log("🔴 Exception in handlePhotoMessage: " . $e->getMessage());
-        $this->sendMessage($chatId, "❌ خطا در پردازش عکس: " . $e->getMessage());
-        return false;
+
+        // گرفتن بزرگترین سایز عکس
+        $photo = end($message['photo']);
+        $fileId = $photo['file_id'];
+
+        error_log("📸 File ID received: {$fileId}");
+
+        try {
+            // ذخیره ساده file_id در دیتابیس
+            $user->update([
+                'telegram_photo_id' => $fileId,
+                'state' => 'main_menu' // بازگشت به حالت عادی
+            ]);
+
+            error_log("✅ Photo file_id saved successfully");
+            $this->telegram->sendMessage($chatId, "✅ عکس پروفایل شما با موفقیت آپلود شد!");
+
+            // بازگشت به منوی پروفایل
+            $this->showProfile($user, $chatId);
+
+            return true;
+
+        } catch (\Exception $e) {
+            error_log("❌ Error saving photo: " . $e->getMessage());
+            $this->telegram->sendMessage($chatId, "❌ خطا در ذخیره عکس. لطفاً مجدداً تلاش کنید.");
+            return false;
+        }
     }
-}
+
+    private function requestProfilePhoto($user, $chatId)
+    {
+        $message = "📸 **آپلود عکس پروفایل**\n\n";
+        $message .= "لطفاً عکس مورد نظر خود را برای پروفایل ارسال کنید.\n";
+        $message .= "⚠️ توجه: این عکس به عنوان عکس اصلی پروفایل شما ذخیره خواهد شد.";
+
+        // کیبورد ساده‌تر برای جلوگیری از خطا
+        $keyboard = [
+            'keyboard' => [
+                [['text' => '🔙 بازگشت به منوی اصلی']]
+            ],
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
+        ];
+
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+
+        // تنظیم state برای دریافت عکس
+        $user->update(['state' => 'awaiting_photo']);
+    }
     private function getBotToken()
     {
         return $_ENV['TELEGRAM_BOT_TOKEN'] ?? '8309595970:AAGaX8wstn-Fby_IzF5cU_a1CxGCPfCEQNk';
@@ -6449,6 +6621,7 @@ class BotCore
             return false;
         }
     }
+
     /**
      * بروزرسانی state کاربر در دیتابیس
      */
@@ -6653,4 +6826,51 @@ class BotCore
         return null;
     }
 
+    private function safeDatabaseOperation(callable $operation)
+    {
+        return DatabaseManager::executeWithRetry($operation);
+    }
+
+    private function findUserSafely($telegramId)
+    {
+        return $this->safeDatabaseOperation(function () use ($telegramId) {
+            return User::where('telegram_id', $telegramId)->first();
+        });
+    }
+    private function updateUserSafely($user, $data)
+    {
+        return $this->safeDatabaseOperation(function () use ($user, $data) {
+            return $user->update($data);
+        });
+    }
+    private $lastHealthCheck = 0;
+    private $healthCheckInterval = 1800; // هر 30 دقیقه
+
+    private function performHealthCheck()
+    {
+        if (time() - $this->lastHealthCheck < $this->healthCheckInterval) {
+            return;
+        }
+
+        try {
+            // تست اتصال دیتابیس
+            if (!DatabaseManager::ensureConnection()) {
+                error_log("🚨 HEALTH CHECK FAILED: Database connection");
+                return;
+            }
+
+            // تست اتصال تلگرام
+            $updates = $this->telegram->getUpdates(0, 1);
+            if (!$updates || !$updates['ok']) {
+                error_log("🚨 HEALTH CHECK FAILED: Telegram API");
+                return;
+            }
+
+            error_log("✅ Health check passed");
+            $this->lastHealthCheck = time();
+
+        } catch (\Exception $e) {
+            error_log("🚨 HEALTH CHECK ERROR: " . $e->getMessage());
+        }
+    }
 }
