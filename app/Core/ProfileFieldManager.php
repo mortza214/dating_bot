@@ -35,55 +35,55 @@ class ProfileFieldManager
     }
 }
     
-    /**
-     * دانلود عکس از تلگرام
-     */
-    private function downloadTelegramPhoto($photo, $botToken, $telegramId)
-{
-    try {
-        echo "📡 Getting file info from Telegram...\n";
-        $file = $this->getFileFromTelegram($photo['file_id'], $botToken);
+//     /**
+//      * دانلود عکس از تلگرام
+//      */
+//     private function downloadTelegramPhoto($photo, $botToken, $telegramId)
+// {
+//     try {
+//         echo "📡 Getting file info from Telegram...\n";
+//         $file = $this->getFileFromTelegram($photo['file_id'], $botToken);
         
-        if (!$file || !isset($file['file_path'])) {
-            echo "❌ Could not get file path from Telegram\n";
-            return false;
-        }
+//         if (!$file || !isset($file['file_path'])) {
+//             echo "❌ Could not get file path from Telegram\n";
+//             return false;
+//         }
         
-        $fileUrl = "https://api.telegram.org/file/bot{$botToken}/{$file['file_path']}";
-        echo "📥 Downloading from: " . $fileUrl . "\n";
+//         $fileUrl = "https://api.telegram.org/file/bot{$botToken}/{$file['file_path']}";
+//         echo "📥 Downloading from: " . $fileUrl . "\n";
         
-        // دانلود عکس
-        $fileContent = file_get_contents($fileUrl);
-        if ($fileContent === false) {
-            echo "❌ Could not download photo from Telegram\n";
-            return false;
-        }
+//         // دانلود عکس
+//         $fileContent = file_get_contents($fileUrl);
+//         if ($fileContent === false) {
+//             echo "❌ Could not download photo from Telegram\n";
+//             return false;
+//         }
         
-        // تولید نام فایل
-        $fileName = uniqid() . '_' . $telegramId . '.jpg';
-        $storagePath = __DIR__ . '/../../storage/profile_photos/' . $fileName;
+//         // تولید نام فایل
+//         $fileName = uniqid() . '_' . $telegramId . '.jpg';
+//         $storagePath = __DIR__ . '/../../storage/profile_photos/' . $fileName;
         
-        // ایجاد پوشه اگر وجود ندارد
-        $storageDir = dirname($storagePath);
-        if (!file_exists($storageDir)) {
-            mkdir($storageDir, 0755, true);
-            echo "📁 Created directory: $storageDir\n";
-        }
+//         // ایجاد پوشه اگر وجود ندارد
+//         $storageDir = dirname($storagePath);
+//         if (!file_exists($storageDir)) {
+//             mkdir($storageDir, 0755, true);
+//             echo "📁 Created directory: $storageDir\n";
+//         }
         
-        // ذخیره عکس
-        if (file_put_contents($storagePath, $fileContent) === false) {
-            echo "❌ Could not save photo to storage\n";
-            return false;
-        }
+//         // ذخیره عکس
+//         if (file_put_contents($storagePath, $fileContent) === false) {
+//             echo "❌ Could not save photo to storage\n";
+//             return false;
+//         }
         
-        echo "✅ Photo saved to: $storagePath\n";
-        return $fileName;
+//         echo "✅ Photo saved to: $storagePath\n";
+//         return $fileName;
         
-    } catch (\Exception $e) {
-        echo "🔴 Exception in downloadTelegramPhoto: " . $e->getMessage() . "\n";
-        return false;
-    }
-}
+//     } catch (\Exception $e) {
+//         echo "🔴 Exception in downloadTelegramPhoto: " . $e->getMessage() . "\n";
+//         return false;
+//     }
+// }
     
     /**
      * دریافت اطلاعات فایل از تلگرام

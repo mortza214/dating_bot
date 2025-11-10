@@ -324,10 +324,10 @@ private function forceResetState($user, $chatId)
     $chatId = $message['chat']['id'];
     $user = \App\Models\User::where('telegram_id', $chatId)->first();
 
-    if (!$user) {
-        $this->handleStartCommand($chatId);
-        return;
-    }
+    // if (!$user) {
+    //     $this->handleStartCommand($chatId);
+    //     return;
+    // }
 
     error_log("📝 handleMessage - User state: " . $user->state . " | Text: " . $text);
 
@@ -508,10 +508,7 @@ case str_starts_with($text, '📦 '):
                 error_log("⚙️ Calling showFilterSettings");
                 $this->handleEditFilters($user, $chatId);
                 break;
-            case '🔙 منوی اصلی':
-                error_log("⚙️ Calling showFilterSettings");
-                $this->showMainMenu($user, $chatId);
-                break;
+        
 
             // در handleMessage - برای دکمه‌های معمولی تاریخچه
             case '💌 پیشنهاد جدید':
@@ -641,14 +638,14 @@ case str_starts_with($text, '📦 '):
                 $this->optimizeDatabaseManual($user, $chatId);
                 break;
 
-            case str_starts_with($data, 'set_filter_value:'):
-                $parts = explode(':', $data);
-                if (count($parts) >= 3) {
-                    $fieldName = $parts[1];
-                    $value = urldecode($parts[2]); // 🔴 decode کردن مقدار
-                    $this->setFilterValue($user, $chatId, $fieldName, $value);
-                }
-                break;
+            // case str_starts_with($data, 'set_filter_value:'):
+            //     $parts = explode(':', $data);
+            //     if (count($parts) >= 3) {
+            //         $fieldName = $parts[1];
+            //         $value = urldecode($parts[2]); // 🔴 decode کردن مقدار
+            //         $this->setFilterValue($user, $chatId, $fieldName, $value);
+            //     }
+            //     break;
 
             case str_starts_with($data, 'select_plan:'):
                 $parts = explode(':', $data);
@@ -746,9 +743,7 @@ case str_starts_with($text, '📦 '):
             case 'get_suggestion':
                 $this->handleGetSuggestion($user, $chatId);
                 break;
-            case 'edit_filters':
-                $this->handleEditFilters($user, $chatId);
-                break;
+           
             case 'debug_field_options':
                 $this->debugFieldOptions($user, $chatId);
                 break;
@@ -769,13 +764,13 @@ case str_starts_with($text, '📦 '):
                 }
    
 
-            case str_starts_with($data, 'contact_history_view:'):
-                $parts = explode(':', $data);
-                if (count($parts) >= 2 && is_numeric($parts[1])) {
-                    $requestedUserId = intval($parts[1]);
-                    $this->showContactDetails($user, $chatId, $requestedUserId);
-                }
-                break;
+            // case str_starts_with($data, 'contact_history_view:'):
+            //     $parts = explode(':', $data);
+            //     if (count($parts) >= 2 && is_numeric($parts[1])) {
+            //         $requestedUserId = intval($parts[1]);
+            //         $this->showContactDetails($user, $chatId, $requestedUserId);
+            //     }
+            //     break;
 
             case 'debug_users':
                 $this->debugUsersStatus($user, $chatId);
@@ -879,9 +874,7 @@ case str_starts_with($text, '📦 '):
             case 'settings':
                 $this->showSettingsMenu($user, $chatId);
                 break;
-            case 'debug_filters':
-                $this->debugFilters($user, $chatId);
-                break;
+          
 
             case 'test_filters':
                 $this->testFilterSystem($user, $chatId);
@@ -926,9 +919,9 @@ case str_starts_with($text, '📦 '):
             case 'fix_gender_data':
                 $this->fixGenderFilterLogic($user, $chatId);
                 break;
-            case 'manage_photos':
-                $this->showPhotoManagementMenu($user, $chatId);
-                break;
+            // case 'manage_photos':
+            //     $this->showPhotoManagementMenu($user, $chatId);
+            //     break;
 
             case 'managing_photos':
                 // در message handler ها $text از پیام کاربر گرفته می‌شود
@@ -1885,29 +1878,26 @@ case str_starts_with($text, '📦 '):
         // بازگشت به حالت عادی
         $user->update(['state' => 'main_menu']);
     }
+      
+    
 
-    private function handleProfileFieldInput($text, $user, $chatId)
+     private function handleProfileFieldInput($text, $user, $chatId)
 {
     $currentState = $user->state;
     
     // اگر کاربر روی دکمه بازگشت کلیک کرد
     if ($text === '🔙 بازگشت به ویرایش پروفایل' || $text === '❌ انصراف') {
         $user->update(['state' => 'main_menu']);
-     //   $this->handleProfileEdit ($user, $chatId);
+        $this->showProfile($user, $chatId);
         return;
     }
 
     $fieldName = str_replace('editing_', '', $currentState);
 
-     // پیدا کردن فیلد با PDO
-    $pdo = $this->getPDO();
-    $stmt = $pdo->prepare("SELECT * FROM profile_fields WHERE field_name = ?");
-    $stmt->execute([$fieldName]);
-
-     $field = $stmt->fetch(\PDO::FETCH_OBJ);
+    // پیدا کردن فیلد - اصلاح خطای تایپو
+   $field = ProfileField::whereFieldName($fieldName);
 
     if (!$field) {
-        error_log("❌ ProfileField not found: " . $fieldName);
         $this->telegram->sendMessage($chatId, "❌ خطای سیستم. لطفاً مجدد تلاش کنید.");
         $user->update(['state' => 'main_menu']);
         return;
@@ -3140,42 +3130,42 @@ case str_starts_with($text, '📦 '):
 
         $this->telegram->sendMessage($chatId, $message, $keyboard);
     }
-    private function handleAdminAddingState($text, $user, $chatId)
-    {
-        // همیشه از دیتابیس refresh کنیم
-        $user->refresh();
+    // private function handleAdminAddingState($text, $user, $chatId)
+    // {
+    //     // همیشه از دیتابیس refresh کنیم
+    //     $user->refresh();
 
-        $state = $user->state;
-        $tempData = json_decode($user->temp_data, true) ?? [];
+    //     $state = $user->state;
+    //     $tempData = json_decode($user->temp_data, true) ?? [];
 
-        error_log("🔍 Handle Admin State: {$state}");
-        error_log("🔍 Temp Data: " . print_r($tempData, true));
+    //     error_log("🔍 Handle Admin State: {$state}");
+    //     error_log("🔍 Temp Data: " . print_r($tempData, true));
 
-        // اگر temp_data خالی هست، خطا بده
-        if (empty($tempData)) {
-            $this->telegram->sendMessage($chatId, "❌ داده‌های فیلد گم شده! لطفاً از /admin شروع کنید.");
-            $user->update([
-                'state' => 'main_menu',
-                'temp_data' => null
-            ]);
-            return;
-        }
+    //     // اگر temp_data خالی هست، خطا بده
+    //     if (empty($tempData)) {
+    //         $this->telegram->sendMessage($chatId, "❌ داده‌های فیلد گم شده! لطفاً از /admin شروع کنید.");
+    //         $user->update([
+    //             'state' => 'main_menu',
+    //             'temp_data' => null
+    //         ]);
+    //         return;
+    //     }
 
-        switch ($state) {
-            case 'admin_adding_field':
-                $this->adminAddFieldStep2($user, $chatId, $text, $tempData);
-                break;
+    //     switch ($state) {
+    //         case 'admin_adding_field':
+    //             $this->adminAddFieldStep2($user, $chatId, $text, $tempData);
+    //             break;
 
-            case 'admin_adding_field_step2':
-                $this->adminAddFieldStep3($user, $chatId, $text, $tempData);
-                break;
+    //         case 'admin_adding_field_step2':
+    //             $this->adminAddFieldStep3($user, $chatId, $text, $tempData);
+    //             break;
 
-            case 'admin_adding_field_step3':
-                // این برای فیلدهای select استفاده می‌شه
-                $this->adminAddFieldStep4($user, $chatId, $text, $tempData);
-                break;
-        }
-    }
+    //         case 'admin_adding_field_step3':
+    //             // این برای فیلدهای select استفاده می‌شه
+    //             $this->adminAddFieldStep4($user, $chatId, $text, $tempData);
+    //             break;
+    //     }
+    // }
     private function adminAddFieldStep1($user, $chatId, $fieldType)
     {
         // ایجاد داده‌های جدید
@@ -6906,7 +6896,7 @@ private function handleProfilePhotoUpload($user, $chatId, $photo)
             error_log("✅ Health check passed");
             $this->lastHealthCheck = time();
 
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             error_log("🚨 HEALTH CHECK ERROR: " . $e->getMessage());
         }
     }
