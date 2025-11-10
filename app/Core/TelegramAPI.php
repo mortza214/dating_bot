@@ -5,7 +5,7 @@ class TelegramAPI
 {
     private $token;
     private $apiUrl;
-    protected $baseUrl; // 🔴 این خط باید وجود داشته باشد
+    protected $baseUrl;
 
     public function __construct($token)
     {

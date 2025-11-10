@@ -307,44 +307,69 @@ class BotCore
             return $user;
         }
     }
+    // این متد را اضافه کنید و با دستور /resetstate فراخوانی کنید
+private function forceResetState($user, $chatId)
+{
+    error_log("🚨 FORCE RESET STATE - Before: " . $user->state);
+    $user->update(['state' => 'main_menu']);
+    error_log("🚨 FORCE RESET STATE - After: " . $user->state);
+    
+    $this->telegram->sendMessage($chatId, "✅ وضعیت سیستم کاملاً بازنشانی شد. اکنون می‌توانید به طور عادی از ربات استفاده کنید.");
+    $this->showMainMenu($user, $chatId);
+}
 
     public function handleMessage($message)
     {
-           $text = $message['text'] ?? '';
+      $text = $message['text'] ?? '';
     $chatId = $message['chat']['id'];
     $user = \App\Models\User::where('telegram_id', $chatId)->first();
 
     if (!$user) {
-        // مدیریت کاربر جدید
+        $this->handleStartCommand($chatId);
         return;
     }
 
-    // ابتدا state کاربر را بررسی کنید
+    error_log("📝 handleMessage - User state: " . $user->state . " | Text: " . $text);
+
+    // 🔴 مدیریت stateهای ویرایش پروفایل
+    if (str_starts_with($user->state, 'editing_')) {
+        error_log("🔄 User is editing profile field: " . $user->state);
+        $this->handleProfileFieldInput($text, $user, $chatId);
+        return;
+    }
+
+    // 🔴 مدیریت state آپلود عکس
     if ($user->state === 'awaiting_photo') {
-        // اگر کاربر در حالت آپلود عکس است اما متن ارسال کرده
-        if (!isset($message['photo'])) {
-            $this->telegram->sendMessage($chatId, "❌ لطفاً یک عکس ارسال کنید یا از منوی زیر استفاده کنید.");
-            
-            // نمایش مجدد منوی آپلود عکس
-            $this->requestProfilePhoto($user, $chatId);
-            return;
-        } else {
-            // اگر عکس ارسال شده، آن را پردازش کن
+        error_log("🔄 User is awaiting photo");
+        
+        if (isset($message['photo'])) {
+            error_log("📸 Photo received, processing...");
             $this->handleProfilePhotoUpload($user, $chatId, $message['photo']);
-            return;
+        } else {
+            error_log("❌ User in awaiting_photo state but sent text: " . $text);
+            
+            // اگر کاربر روی "بازگشت" کلیک کرد
+            if ($text === '🔙 بازگشت به منوی اصلی') {
+                $user->update(['state' => 'main_menu']);
+                $this->showMainMenu($user, $chatId);
+            } else {
+                $this->telegram->sendMessage($chatId, "❌ لطفاً یک عکس ارسال کنید یا از دکمه بازگشت استفاده کنید.");
+                $this->requestProfilePhoto($user, $chatId);
+            }
         }
-           // بررسی state کاربر
-    if (str_starts_with($user->state, 'editing_profile_field:')) {
-        $fieldName = explode(':', $user->state)[1];
-        $this->handleProfileFieldInput($user, $chatId, $fieldName, $text);
         return;
     }
 
-    }
+    
 
     // اگر state دیگری دارید، آنها را اینجا بررسی کنید
     // if ($user->state === 'awaiting_something_else') { ... }
         switch ($text) {
+            
+// در handleMessage اضافه کنید:
+case '/resetstate':
+    $this->forceResetState($user, $chatId);
+    break;
             case '/start':
                 $this->showMainMenu($user, $chatId);
                 break;
@@ -545,9 +570,9 @@ case str_starts_with($text, '📦 '):
             // case 'profile_view':
             //     $this->showProfile($user, $chatId);
             //     break;
-            // case 'back_to_profile_menu':
-            //     $this->showProfilemenu($user, $chatId);
-            //     break;
+            case 'back_to_profile_menu':
+                $this->showProfilemenu($user, $chatId);
+                break;
             case 'profile_status':
                 $this->showProfileStatus($user, $chatId);
                 break;
@@ -1448,6 +1473,7 @@ case str_starts_with($text, '📦 '):
     }
     private function showFieldEdit($field, $user, $chatId, $currentIndex, $totalFields)
 {
+    
     // تنظیم state برای فیلد جاری - بدون پاک کردن state در ابتدا
     $user->update(['state' => "editing_{$field->field_name}"]);
     
@@ -1816,7 +1842,7 @@ case str_starts_with($text, '📦 '):
                 elseif (!empty($text)) {
                     if ($text === '❌ لغو آپلود عکس') {
                         $this->sendMessage($chatId, "آپلود عکس لغو شد.");
-                        $this->showPhotoManagementMenu($user, $chatId);
+                     //   $this->showPhotoManagementMenu($user, $chatId);
                     } else {
                         $this->sendMessage($chatId, "لطفاً یک عکس ارسال کنید. برای لغو از گزینه '❌ لغو آپلود عکس' استفاده کنید.");
 
@@ -1867,16 +1893,21 @@ case str_starts_with($text, '📦 '):
     // اگر کاربر روی دکمه بازگشت کلیک کرد
     if ($text === '🔙 بازگشت به ویرایش پروفایل' || $text === '❌ انصراف') {
         $user->update(['state' => 'main_menu']);
-        $this->handleEditProfile($user, $chatId);
+     //   $this->handleProfileEdit ($user, $chatId);
         return;
     }
 
     $fieldName = str_replace('editing_', '', $currentState);
 
-    // پیدا کردن فیلد - اصلاح خطای تایپو
-    $field = ProfileField::where('field_name', $fieldName)->first();
+     // پیدا کردن فیلد با PDO
+    $pdo = $this->getPDO();
+    $stmt = $pdo->prepare("SELECT * FROM profile_fields WHERE field_name = ?");
+    $stmt->execute([$fieldName]);
+
+     $field = $stmt->fetch(\PDO::FETCH_OBJ);
 
     if (!$field) {
+        error_log("❌ ProfileField not found: " . $fieldName);
         $this->telegram->sendMessage($chatId, "❌ خطای سیستم. لطفاً مجدد تلاش کنید.");
         $user->update(['state' => 'main_menu']);
         return;
@@ -6409,18 +6440,18 @@ private function cleanupExpiredSessions()
     /**
      * 🔴 تبدیل stdClass به User object
      */
-    private function convertToUserObject($stdClassUser)
-    {
-        if ($stdClassUser instanceof \App\Models\User) {
-            return $stdClassUser; // قبلاً تبدیل شده
-        }
+    // private function convertToUserObject($stdClassUser)
+    // {
+    //     if ($stdClassUser instanceof \App\Models\User) {
+    //         return $stdClassUser; // قبلاً تبدیل شده
+    //     }
 
-        $user = new \App\Models\User();
-        foreach ($stdClassUser as $key => $value) {
-            $user->$key = $value;
-        }
-        return $user;
-    }
+    //     $user = new \App\Models\User();
+    //     foreach ($stdClassUser as $key => $value) {
+    //         $user->$key = $value;
+    //     }
+    //     return $user;
+    // }
     // در کلاس BotCore
     // خط ~6072 - جایگزینی متد موجود
     public function handlePhotoMessage($user, $message)
@@ -6462,8 +6493,14 @@ private function cleanupExpiredSessions()
         }
     }
 
-    private function requestProfilePhoto($user, $chatId)
+  private function requestProfilePhoto($user, $chatId)
 {
+    error_log("🔄 requestProfilePhoto - Current state: " . $user->state);
+    
+    // ابتدا state را حتماً تغییر دهید
+    $user->update(['state' => 'awaiting_photo']);
+    error_log("✅ requestProfilePhoto - New state: " . $user->state);
+    
     $message = "📸 **آپلود عکس پروفایل**\n\n";
     $message .= "لطفاً عکس مورد نظر خود را برای پروفایل ارسال کنید.\n";
     $message .= "⚠️ توجه: این عکس به عنوان عکس اصلی پروفایل شما ذخیره خواهد شد.";
@@ -6477,9 +6514,44 @@ private function cleanupExpiredSessions()
     ];
 
     $this->telegram->sendMessage($chatId, $message, $keyboard);
+}
+private function handleProfilePhotoUpload($user, $chatId, $photo)
+{
+    error_log("🔄 handleProfilePhotoUpload - Starting with state: " . $user->state);
+    
+    try {
+        // دریافت بزرگترین سایز عکس
+        $largestPhoto = end($photo);
+        $fileId = $largestPhoto['file_id'];
+        
+        error_log("📸 Photo file_id: " . $fileId);
 
-    // تنظیم state برای دریافت عکس
-    $user->update(['state' => 'awaiting_photo']);
+        // 🔴 مهم: ابتدا state را بازنشانی کنید، سپس بقیه عملیات
+        $user->update(['state' => 'main_menu']);
+        error_log("✅ State reset to main_menu BEFORE processing");
+
+        // سپس عکس را ذخیره کنید
+        $user->update([
+            'telegram_photo_id' => $fileId
+        ]);
+
+        error_log("✅ Photo saved to database");
+
+        $this->telegram->sendMessage($chatId, "✅ عکس پروفایل شما با موفقیت آپلود شد!");
+        
+        // بازگشت به منوی اصلی
+        $this->showMainMenu($user, $chatId);
+
+    } catch (\Exception $e) {
+        error_log("❌ Error in handleProfilePhotoUpload: " . $e->getMessage());
+        
+        // حتی در صورت خطا هم state را بازنشانی کنید
+        $user->update(['state' => 'main_menu']);
+        error_log("✅ State reset to main_menu after error");
+        
+        $this->telegram->sendMessage($chatId, "❌ خطا در آپلود عکس. لطفاً مجدداً تلاش کنید.");
+        $this->showMainMenu($user, $chatId);
+    }
 }
     private function getBotToken()
     {
@@ -6671,53 +6743,53 @@ private function cleanupExpiredSessions()
 
             default:
                 $this->sendMessage($chatId, "لطفاً یکی از گزینه‌های منو را انتخاب کنید.");
-                $this->showPhotoManagementMenu($user, $chatId);
+               // $this->showPhotoManagementMenu($user, $chatId);
                 break;
         }
 
         return true;
     }
-    private function processMessage($message)
-    {
-        $chatId = $message['chat']['id'];
-        $user = $this->findOrCreateUser($message['from'], $chatId);
+    // private function processMessage($message)
+    // {
+    //     $chatId = $message['chat']['id'];
+    //     $user = $this->findOrCreateUser($message['from'], $chatId);
 
-        echo "📨 Process Message - Chat: $chatId, User State: {$user->state}\n";
-        echo "🔍 Message structure: " . json_encode(array_keys($message)) . "\n";
+    //     echo "📨 Process Message - Chat: $chatId, User State: {$user->state}\n";
+    //     echo "🔍 Message structure: " . json_encode(array_keys($message)) . "\n";
 
-        // دیباگ کامل برای عکس
-        if (isset($message['photo'])) {
-            echo "🎯 PHOTO DIRECTLY FOUND in message['photo']\n";
-            echo "📸 Photo array count: " . count($message['photo']) . "\n";
-            return $this->handlePhotoMessage($user, $message);
-        }
+    //     // دیباگ کامل برای عکس
+    //     if (isset($message['photo'])) {
+    //         echo "🎯 PHOTO DIRECTLY FOUND in message['photo']\n";
+    //         echo "📸 Photo array count: " . count($message['photo']) . "\n";
+    //         return $this->handlePhotoMessage($user, $message);
+    //     }
 
-        // بررسی ساختارهای مختلف تلگرام
-        if (isset($message['message']['photo'])) {
-            echo "🎯 PHOTO FOUND in message['message']['photo']\n";
-            return $this->handlePhotoMessage($user, $message['message']);
-        }
+    //     // بررسی ساختارهای مختلف تلگرام
+    //     if (isset($message['message']['photo'])) {
+    //         echo "🎯 PHOTO FOUND in message['message']['photo']\n";
+    //         return $this->handlePhotoMessage($user, $message['message']);
+    //     }
 
-        // اگر update از نوع message است
-        if (isset($message['message']) && isset($message['message']['photo'])) {
-            echo "🎯 PHOTO FOUND in update->message->photo\n";
-            return $this->handlePhotoMessage($user, $message['message']);
-        }
+    //     // اگر update از نوع message است
+    //     if (isset($message['message']) && isset($message['message']['photo'])) {
+    //         echo "🎯 PHOTO FOUND in update->message->photo\n";
+    //         return $this->handlePhotoMessage($user, $message['message']);
+    //     }
 
-        echo "❌ NO PHOTO detected in any structure\n";
+    //     echo "❌ NO PHOTO detected in any structure\n";
 
-        $text = $message['text'] ?? ($message['message']['text'] ?? '');
+    //     $text = $message['text'] ?? ($message['message']['text'] ?? '');
 
-        // بقیه پردازش برای متن
-        if (!empty($text)) {
-            if (isset($user->state)) {
-                return $this->handleProfileState($text, $user, $chatId, $message);
-            }
-            return $this->handleTextCommand($text, $user, $chatId);
-        }
+    //     // بقیه پردازش برای متن
+    //     if (!empty($text)) {
+    //         if (isset($user->state)) {
+    //             return $this->handleProfileState($text, $user, $chatId, $message);
+    //         }
+    //         return $this->handleTextCommand($text, $user, $chatId);
+    //     }
 
-        return false;
-    }
+    //     return false;
+    // }
     private function getLastUpdateId()
     {
         $filePath = __DIR__ . '/../../storage/last_update_id.txt';

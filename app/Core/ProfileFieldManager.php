@@ -29,7 +29,7 @@ class ProfileFieldManager
         echo "💾 Database result: " . ($result ? "SUCCESS" : "FAILED") . "\n";
         return true;
         
-    } catch (Exception $e) {
+    } catch (\Exception $e) {
         echo "❌ Error: " . $e->getMessage() . "\n";
         return false;
     }
@@ -79,7 +79,7 @@ class ProfileFieldManager
         echo "✅ Photo saved to: $storagePath\n";
         return $fileName;
         
-    } catch (Exception $e) {
+    } catch (\Exception $e) {
         echo "🔴 Exception in downloadTelegramPhoto: " . $e->getMessage() . "\n";
         return false;
     }

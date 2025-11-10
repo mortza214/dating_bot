@@ -288,12 +288,5 @@ class UserSuggestion
         }
         return $pdo;
     }
-    // در کلاس UserSuggestion
-public static function getLastShownSuggestion($userId)
-{
-    return self::where('user_id', $userId)
-        ->where('shown', true)
-        ->orderBy('updated_at', 'desc')
-        ->first();
-}
+    
 }
