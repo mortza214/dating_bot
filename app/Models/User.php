@@ -182,5 +182,47 @@ class User extends Model
         throw new \Exception('خطا در کسر از کیف پول: ' . $e->getMessage());
     }
 }
+// در کلاس User (app/Models/User.php)
+// public function deactivate($reason = 'موقت')
+// {
+//     try {
+//         $pdo = self::getPDO();
+//         $sql = "UPDATE users SET is_active = 0, deactivation_reason = ?, deactivated_at = NOW() WHERE telegram_id = ?";
+//         $stmt = $pdo->prepare($sql);
+//         return $stmt->execute([$reason, $this->telegram_id]);
+//     } catch (\Exception $e) {
+//         error_log("Error deactivating user: " . $e->getMessage());
+//         return false;
+//     }
+// }
+
+// public function activate()
+// {
+//     try {
+//         $pdo = self::getPDO();
+//         $sql = "UPDATE users SET is_active = 1, deactivation_reason = NULL, deactivated_at = NULL WHERE telegram_id = ?";
+//         $stmt = $pdo->prepare($sql);
+//         return $stmt->execute([$this->telegram_id]);
+//     } catch (\Exception $e) {
+//         error_log("Error activating user: " . $e->getMessage());
+//         return false;
+//     }
+// }
+
+public function isActive()
+{
+    return (bool) $this->is_active;
+}
+
+public function getStatusInfo()
+{
+    if ($this->is_active) {
+        return "🟢 حساب شما فعال است";
+    } else {
+        $reason = $this->deactivation_reason ?? 'موقت';
+        $date = $this->deactivated_at ? date('Y-m-d H:i', strtotime($this->deactivated_at)) : 'نامشخص';
+        return "🔴 حساب شما غیرفعال است\n📅 از تاریخ: $date\n📝 دلیل: $reason";
+    }
+}
 
 }

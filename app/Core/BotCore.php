@@ -181,10 +181,6 @@ class BotCore
             // پیدا کردن کاربر با مدیریت خطا
             $user = $this->findUserSafely($chatId);
 
-            // if (!$user) {
-            //     $this->handleStartCommand($message);
-            //     return;
-            // }
 
             if (isset($message['photo'])) {
                 $this->handlePhotoMessage($user, $message);
@@ -202,6 +198,7 @@ class BotCore
             }
         }
     }
+
     private function findOrCreateUser($from, $chatId = null)
     {
         $telegramId = $from['id'];
@@ -322,12 +319,19 @@ private function forceResetState($user, $chatId)
     {
       $text = $message['text'] ?? '';
     $chatId = $message['chat']['id'];
-    $user = \App\Models\User::where('telegram_id', $chatId)->first();
+        $from = $message['from']; // اطلاعات کاربر
+    
 
-    // if (!$user) {
-    //     $this->handleStartCommand($chatId);
-    //     return;
-    // }
+    $user = \App\Models\User::where('telegram_id', $chatId)->first();
+  $user = $this->findOrCreateUser($from, $chatId);
+    
+    if (!$user) {
+        error_log("❌ Failed to find or create user");
+        return $this->sendMessage($chatId, "خطا در بارگذاری پروفایل. لطفاً دوباره تلاش کنید.");
+    }
+
+    
+           
 
     error_log("📝 handleMessage - User state: " . $user->state . " | Text: " . $text);
 
@@ -358,6 +362,29 @@ private function forceResetState($user, $chatId)
             }
         }
         return;
+    }
+
+    // در handleMessage - بخش stateها
+    // 🔴 اول stateهای خاص را بررسی کن - اما فقط برای دستورات مرتبط
+    if ($user->state === 'awaiting_deactivation_reason') {
+        // فقط اگر متن مربوط به غیرفعال سازی است پردازش کن
+        if (str_starts_with($text, '⏸️ غیرفعال سازی موقت - ') || $text === '🔙 بازگشت به منوی اصلی') {
+            if ($text === '🔙 بازگشت به منوی اصلی') {
+                $this->updateUserState($user->telegram_id, 'main_menu');
+                $this->showMainMenu($user, $chatId);
+                return;
+            }
+            
+            $reason = str_replace('⏸️ غیرفعال سازی موقت - ', '', $text);
+            $this->handleDeactivationConfirmation($user, $chatId, $reason);
+            return;
+        }
+        // اگر متن غیرمرتبط است، state را ریست کن و به منوی اصلی برگرد
+        else {
+            $this->updateUserState($user->telegram_id, 'main_menu');
+            $this->showMainMenu($user, $chatId);
+            return;
+        }
     }
 
     
@@ -391,12 +418,18 @@ case str_starts_with($text, '👤 '):
 case str_starts_with($text, '📦 '):
     $this->handlePlanSelection($user, $chatId, $text);
     break;
-            // case '💌 دریافت پیشنهاد':
-            //     $this->handleGetSuggestion($user, $chatId);
-            //     break;
+            
             case '⚙️ تنظیمات':
                 $this->showSettingsMenu($user, $chatId);
                 break;
+                // در handleMessage در BotCore.php - بخش switch/case
+case '⏸️ غیرفعال سازی موقت':
+    $this->handleDeactivateRequest($user, $chatId);
+    break;
+    
+case '▶️ فعال سازی حساب':
+    $this->handleActivateRequest($user, $chatId);
+    break;
             case '👥 سیستم دعوت':
                 $this->handleReferral($user, $chatId);
                 break;
@@ -532,41 +565,27 @@ case str_starts_with($text, '📦 '):
 
         // پردازش کلیه callback data ها
         switch ($data) {
-            // منوی اصلی
-            // case 'main_menu':
-            //     $this->showMainMenu($user, $chatId);
-            //     break;
+          //  منوی اصلی
+            case 'main_menu':
+                $this->showMainMenu($user, $chatId);
+                break;
             case 'profile':
                 $this->handleProfileCommand($user, $chatId);
                 break;
-            // case 'wallet':
-            //     $this->handleWallet($user, $chatId);
-            //     break;
+            
             case 'search':
                 $this->handleSearch($user, $chatId);
                 break;
-            // case 'referral':
-            //     $this->handleReferral($user, $chatId);
-            //     break;
-            case 'help':
+                       case 'help':
                 $this->handleHelp($chatId);
                 break;
 
-            // منوی کیف پول
-            // case 'wallet_charge':
-            //     $this->handleCharge($user, $chatId);
-            //     break;
-            // case 'wallet_transactions':
-            //     $this->handleTransactions($user, $chatId);
-            //     break;
-
+            
             // منوی پروفایل - سیستم جدید
             case 'profile_edit_start':
                 $this->startProfileEdit($user, $chatId);
                 break;
-            // case 'profile_view':
-            //     $this->showProfile($user, $chatId);
-            //     break;
+           
             case 'back_to_profile_menu':
                 $this->showProfilemenu($user, $chatId);
                 break;
@@ -597,13 +616,7 @@ case str_starts_with($text, '📦 '):
                 $this->handleAutoFixFields($user, $chatId);
                 break;
 
-            // بازگشت‌ها
-            // case 'back_to_main':
-            //     $this->showMainMenu($user, $chatId);
-            //     break;
-            // case 'back_to_wallet':
-            //     $this->handleWallet($user, $chatId);
-            //     break;
+          
             case 'back_to_profile':
                 $this->handleProfileCommand($user, $chatId);
                 break;
@@ -638,14 +651,7 @@ case str_starts_with($text, '📦 '):
                 $this->optimizeDatabaseManual($user, $chatId);
                 break;
 
-            // case str_starts_with($data, 'set_filter_value:'):
-            //     $parts = explode(':', $data);
-            //     if (count($parts) >= 3) {
-            //         $fieldName = $parts[1];
-            //         $value = urldecode($parts[2]); // 🔴 decode کردن مقدار
-            //         $this->setFilterValue($user, $chatId, $fieldName, $value);
-            //     }
-            //     break;
+            
 
             case str_starts_with($data, 'select_plan:'):
                 $parts = explode(':', $data);
@@ -958,6 +964,10 @@ case str_starts_with($text, '📦 '):
             case 'back_to_main_from_photos':
                 $this->showMainMenu($user, $chatId);
                 break;
+                 // منوی کیف پول
+            case 'wallet_charge':
+                $this->handleCharge($user, $chatId);
+                break;
 
 
 
@@ -1258,6 +1268,7 @@ case str_starts_with($text, '📦 '):
     // ==================== منوی اصلی ====================
     private function showMainMenu($user, $chatId)
     {
+          
         $wallet = $user->getWallet();
         $cost = $this->getContactRequestCost();
 
@@ -1269,11 +1280,13 @@ case str_starts_with($text, '📦 '):
         if ($user->is_profile_completed != $actualCompletion) {
             $user->update(['is_profile_completed' => $actualCompletion]);
         }
+         $statusText = $user->is_active ? '🟢 فعال' : '🔴 غیرفعال';
 
         $message = "🎯 **منوی اصلی ربات دوستیابی**\n\n";
         $message .= "👤 کاربر: " . $user->first_name . "\n";
         $message .= "💰 موجودی: " . number_format($wallet->balance) . " تومان\n";
         $message .= "📊 وضعیت پروفایل: " . ($actualCompletion ? "✅ تکمیل شده" : "❌ ناقص ({$completionPercent}%)") . "\n\n";
+         $message .= "📱 وضعیت حساب: {$statusText}\n\n"; // 🔴 این خط اضافه شده
 
         // 🔴 اضافه کردن وضعیت پیشنهادات
         $suggestionCount = \App\Models\UserSuggestion::getUserSuggestionCount($user->id);
@@ -1318,6 +1331,7 @@ case str_starts_with($text, '📦 '):
         $userFilters = UserFilter::getFilters($user->id);
         $activeFiltersCount = 0;
 
+         
         foreach ($userFilters as $value) {
             if (!empty($value) && $value !== '') {
                 if (is_array($value)) {
@@ -1328,6 +1342,8 @@ case str_starts_with($text, '📦 '):
                 }
             }
         }
+$statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '▶️ فعال سازی حساب';
+ $statusText = $user->is_active ? '🟢 فعال' : '🔴 غیرفعال';
 
         $filterStatus = $activeFiltersCount > 0 ? "✅ فعال ({$activeFiltersCount} فیلتر)" : "❌ غیرفعال";
 
@@ -1336,6 +1352,7 @@ case str_starts_with($text, '📦 '):
         $message .= "💰 موجودی: " . number_format($wallet->balance) . " تومان\n";
         $message .= "📊 وضعیت پروفایل: " . ($actualCompletion ? "✅ تکمیل شده" : "❌ ناقص ({$completionPercent}%)") . "\n";
         $message .= "🎛️ وضعیت فیلترها: {$filterStatus}\n\n";
+        $message .= "📱 وضعیت حساب: {$statusText}\n\n"; // 🔴 این خط اضافه شده
         $message .= "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:";
 
         $keyboard = [
@@ -1345,14 +1362,14 @@ case str_starts_with($text, '📦 '):
                     ['text' => '⚙️ تنظیم فیلترها']
                 ],
                 [
-
+                    $statusButton,
                     ['text' => '🔙 بازگشت به منوی اصلی']
                 ]
             ],
             'resize_keyboard' => true,
             'one_time_keyboard' => false
         ];
-
+        $statusText = $user->getStatusInfo();
         $this->telegram->sendMessage($chatId, $message, $keyboard);
     }
 
@@ -3130,42 +3147,7 @@ case str_starts_with($text, '📦 '):
 
         $this->telegram->sendMessage($chatId, $message, $keyboard);
     }
-    // private function handleAdminAddingState($text, $user, $chatId)
-    // {
-    //     // همیشه از دیتابیس refresh کنیم
-    //     $user->refresh();
-
-    //     $state = $user->state;
-    //     $tempData = json_decode($user->temp_data, true) ?? [];
-
-    //     error_log("🔍 Handle Admin State: {$state}");
-    //     error_log("🔍 Temp Data: " . print_r($tempData, true));
-
-    //     // اگر temp_data خالی هست، خطا بده
-    //     if (empty($tempData)) {
-    //         $this->telegram->sendMessage($chatId, "❌ داده‌های فیلد گم شده! لطفاً از /admin شروع کنید.");
-    //         $user->update([
-    //             'state' => 'main_menu',
-    //             'temp_data' => null
-    //         ]);
-    //         return;
-    //     }
-
-    //     switch ($state) {
-    //         case 'admin_adding_field':
-    //             $this->adminAddFieldStep2($user, $chatId, $text, $tempData);
-    //             break;
-
-    //         case 'admin_adding_field_step2':
-    //             $this->adminAddFieldStep3($user, $chatId, $text, $tempData);
-    //             break;
-
-    //         case 'admin_adding_field_step3':
-    //             // این برای فیلدهای select استفاده می‌شه
-    //             $this->adminAddFieldStep4($user, $chatId, $text, $tempData);
-    //             break;
-    //     }
-    // }
+    
     private function adminAddFieldStep1($user, $chatId, $fieldType)
     {
         // ایجاد داده‌های جدید
@@ -3429,6 +3411,22 @@ case str_starts_with($text, '📦 '):
     private function handleGetSuggestion($user, $chatId)
     {
         error_log("🎯 handleGetSuggestion START - User: {$user->id}, Profile Completed: " . ($user->is_profile_completed ? 'YES' : 'NO'));
+
+         
+    // 🔴 ابتدا چک کردن فعال بودن کاربر
+    if (!$user->is_active) {
+        $message = "⏸️ **حساب شما غیرفعال است!**\n\n";
+        $message .= "در حال حاضر نمی‌توانید پیشنهاد دریافت کنید.\n\n";
+        $message .= "📝 برای فعال سازی حساب، از منوی اصلی گزینه '▶️ فعال سازی حساب' را انتخاب کنید.";
+        
+        $keyboard = [
+            ['▶️ فعال سازی حساب'],
+            ['🔙 بازگشت به منوی اصلی']
+        ];
+        
+        $this->sendMessage($chatId, $message, $keyboard);
+        return;
+    }
         // چک کردن تکمیل بودن پروفایل
         if (!$user->is_profile_completed) {
             $message = "❌ **برای دریافت پیشنهاد باید پروفایل شما تکمیل باشد!**\n\n";
@@ -3560,7 +3558,12 @@ case str_starts_with($text, '📦 '):
         } else {
             error_log("🔍 استفاده از منطق پیشفرض (بدون فیلتر فعال)");
             $suitableUsers = $this->findSuggestionWithDefaultLogic($user, true);
+
         }
+        // 🔴 فیلتر کردن کاربران غیرفعال
+    $suitableUsers = array_filter($suitableUsers, function($suggestedUser) {
+        return $suggestedUser->is_active == 1;
+    });
 
         error_log("🔍 مجموع کاربران مناسب: " . count($suitableUsers));
 
@@ -3677,6 +3680,7 @@ case str_starts_with($text, '📦 '):
         $sql = "SELECT * FROM users 
         WHERE id NOT IN ($excludedStr) 
         AND is_profile_completed = 1 
+         AND is_active = 1  -- 🔴 اضافه شده
         {$whereClause}
         ORDER BY RAND()
         LIMIT 50";
@@ -3838,6 +3842,7 @@ case str_starts_with($text, '📦 '):
         $sql = "SELECT * FROM users 
             WHERE id NOT IN ($excludedStr) 
             AND is_profile_completed = 1 
+            AND is_active = 1  -- 🔴 فقط کاربران فعال
             AND (
                 gender = ? OR 
                 gender = ? OR 
@@ -5589,26 +5594,20 @@ private function cleanupExpiredSessions()
     $wallet = $user->getWallet();
     $message .= "💰 **موجودی فعلی شما:** " . number_format($wallet->balance) . " تومان\n\n";
     
-    if ($wallet->balance >= $plan->amount) {
-        $message .= "✅ موجودی شما کافی است. آیا مایل به پرداخت و فعال‌سازی این پلن هستید؟";
-    } else {
-        $message .= "❌ موجودی شما کافی نیست. لطفاً ابتدا کیف پول خود را شارژ کنید.";
-    }
+    
+ 
 
     // کیبورد اینلاین (شیشه‌ای) برای تأیید پرداخت
     $keyboard = ['inline_keyboard' => []];
     
-    if ($wallet->balance >= $plan->amount) {
+   
         $keyboard['inline_keyboard'][] = [
             ['text' => '✅ تأیید و پرداخت', 'callback_data' => "confirm_payment:{$plan->id}"],
             ['text' => '❌ انصراف', 'callback_data' => 'cancel_payment']
         ];
-    } else {
-        $keyboard['inline_keyboard'][] = [
-            ['text' => '💰 شارژ کیف پول', 'callback_data' => 'wallet_charge'],
-            ['text' => '🔙 بازگشت', 'callback_data' => 'back_to_wallet']
-        ];
-    }
+   
+      
+   
 
     $this->telegram->sendMessage($chatId, $message, $keyboard);
 }
@@ -5887,21 +5886,6 @@ private function cleanupExpiredSessions()
     }
     
 
-    // private function isAdmin($telegramId)
-    // {
-    //     try {
-    //         $pdo = $this->getPDO();
-    //         $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM administrators WHERE telegram_id = ?");
-    //         $stmt->execute([$telegramId]);
-    //         $result = $stmt->fetch(PDO::FETCH_OBJ);
-    //         return $result->count > 0;
-    //     } catch (\Exception $e) {
-    //         error_log("❌ خطا در بررسی ادمین: " . $e->getMessage());
-    //         return false;
-    //     }
-    // }
-
-    // متد جایگزین برای notifyAdminsAboutPayment
     private function notifyAdminsAboutPayment($user, $paymentRequest)
     {
         $admins = $this->getAllAdmins();
@@ -6427,23 +6411,7 @@ private function cleanupExpiredSessions()
     // انتهای کد موقت 
 
 
-    /**
-     * 🔴 تبدیل stdClass به User object
-     */
-    // private function convertToUserObject($stdClassUser)
-    // {
-    //     if ($stdClassUser instanceof \App\Models\User) {
-    //         return $stdClassUser; // قبلاً تبدیل شده
-    //     }
-
-    //     $user = new \App\Models\User();
-    //     foreach ($stdClassUser as $key => $value) {
-    //         $user->$key = $value;
-    //     }
-    //     return $user;
-    // }
-    // در کلاس BotCore
-    // خط ~6072 - جایگزینی متد موجود
+    
     public function handlePhotoMessage($user, $message)
     {
         $chatId = $user->telegram_id;
@@ -6739,47 +6707,7 @@ private function handleProfilePhotoUpload($user, $chatId, $photo)
 
         return true;
     }
-    // private function processMessage($message)
-    // {
-    //     $chatId = $message['chat']['id'];
-    //     $user = $this->findOrCreateUser($message['from'], $chatId);
-
-    //     echo "📨 Process Message - Chat: $chatId, User State: {$user->state}\n";
-    //     echo "🔍 Message structure: " . json_encode(array_keys($message)) . "\n";
-
-    //     // دیباگ کامل برای عکس
-    //     if (isset($message['photo'])) {
-    //         echo "🎯 PHOTO DIRECTLY FOUND in message['photo']\n";
-    //         echo "📸 Photo array count: " . count($message['photo']) . "\n";
-    //         return $this->handlePhotoMessage($user, $message);
-    //     }
-
-    //     // بررسی ساختارهای مختلف تلگرام
-    //     if (isset($message['message']['photo'])) {
-    //         echo "🎯 PHOTO FOUND in message['message']['photo']\n";
-    //         return $this->handlePhotoMessage($user, $message['message']);
-    //     }
-
-    //     // اگر update از نوع message است
-    //     if (isset($message['message']) && isset($message['message']['photo'])) {
-    //         echo "🎯 PHOTO FOUND in update->message->photo\n";
-    //         return $this->handlePhotoMessage($user, $message['message']);
-    //     }
-
-    //     echo "❌ NO PHOTO detected in any structure\n";
-
-    //     $text = $message['text'] ?? ($message['message']['text'] ?? '');
-
-    //     // بقیه پردازش برای متن
-    //     if (!empty($text)) {
-    //         if (isset($user->state)) {
-    //             return $this->handleProfileState($text, $user, $chatId, $message);
-    //         }
-    //         return $this->handleTextCommand($text, $user, $chatId);
-    //     }
-
-    //     return false;
-    // }
+    
     private function getLastUpdateId()
     {
         $filePath = __DIR__ . '/../../storage/last_update_id.txt';
@@ -6957,4 +6885,107 @@ private function clearUserState($userId)
         return false;
     }
 }
+// در کلاس BotCore.php
+private function handleDeactivateRequest($user, $chatId)
+{
+    // نمایش گزینه‌های دلیل غیرفعال سازی
+    $keyboard = [
+        ['⏸️ غیرفعال سازی موقت - مسافرت'],
+        ['⏸️ غیرفعال سازی موقت - مشغله کاری'],
+        ['⏸️ غیرفعال سازی موقت - استراحت'],
+        ['🔙 بازگشت به منوی اصلی']
+    ];
+    
+    $message = "⏸️ غیرفعال سازی موقت حساب\n\n";
+    $message .= "در این حالت:\n";
+    $message .= "• شما به دیگران پیشنهاد داده نمی‌شوید\n";
+    $message .= "• شما پیشنهادی دریافت نمی‌کنید\n";
+    $message .= "• تمام اطلاعات و سوابق شما حفظ می‌شود\n";
+    $message .= "• هر زمان می‌توانید حساب را فعال کنید\n\n";
+    $message .= "لطفاً دلیل غیرفعال سازی را انتخاب کنید:";
+    
+    $this->sendMessage($chatId, $message, $keyboard);
+    $this->updateUserState($user->telegram_id, 'awaiting_deactivation_reason');
+}
+
+private function handleActivateRequest($user, $chatId)
+{
+    if ($user->is_active) {
+        $this->sendMessage($chatId, "✅ حساب شما در حال حاضر فعال است.");
+        return;
+    }
+    
+    if ($this->activateUser($user->telegram_id)) {
+        $message = "✅ حساب شما با موفقیت فعال شد!\n\n";
+        $message .= "از این به بعد:\n";
+        $message .= "• شما در جستجوی دیگران ظاهر می‌شوید\n";
+        $message .= "• شما پیشنهادات جدید دریافت خواهید کرد\n";
+        $message .= "• می‌توانید به جستجوی افراد بپردازید";
+        
+        $this->sendMessage($chatId, $message);
+    } else {
+        $this->sendMessage($chatId, "❌ خطا در فعال سازی حساب. لطفاً دوباره تلاش کنید.");
+    }
+    
+    $this->showMainMenu($user, $chatId);
+}
+
+
+private function handleDeactivationConfirmation($user, $chatId, $reason)
+{
+    if ($this->deactivateUser($user->telegram_id, $reason)) {
+        $message = "✅ حساب شما با موفقیت غیرفعال شد\n\n";
+        $message .= "📝 دلیل: $reason\n\n";
+        $message .= "در این حالت:\n";
+        $message .= "• شما به دیگران پیشنهاد داده نمی‌شوید\n";
+        $message .= "• شما پیشنهادی دریافت نمی‌کنید\n";
+        $message .= "• تمام اطلاعات شما حفظ شده است\n\n";
+        $message .= "هر زمان که مایل بودید می‌توانید از منوی اصلی حساب را فعال کنید.";
+        
+        $this->sendMessage($chatId, $message);
+    } else {
+        $this->sendMessage($chatId, "❌ خطا در غیرفعال سازی حساب. لطفاً دوباره تلاش کنید.");
+    }
+    
+    $this->showMainMenu($user, $chatId);
+}
+// متدهای کمکی برای فعال/غیرفعال کردن کاربر
+private function activateUser($telegramId)
+{
+    try {
+        $pdo = $this->getPDO();
+        $sql = "UPDATE users SET is_active = 1, deactivation_reason = NULL, deactivated_at = NULL WHERE telegram_id = ?";
+        $stmt = $pdo->prepare($sql);
+        return $stmt->execute([$telegramId]);
+    } catch (\Exception $e) {
+        error_log("Error activating user: " . $e->getMessage());
+        return false;
+    }
+}
+
+private function deactivateUser($telegramId, $reason = 'موقت')
+{
+    try {
+        $pdo = $this->getPDO();
+        $sql = "UPDATE users SET is_active = 0, deactivation_reason = ?, deactivated_at = NOW() WHERE telegram_id = ?";
+        $stmt = $pdo->prepare($sql);
+        return $stmt->execute([$reason, $telegramId]);
+    } catch (\Exception $e) {
+        error_log("Error deactivating user: " . $e->getMessage());
+        return false;
+    }
+}
+
+// و متد getStatusInfo را در BotCore پیاده‌سازی کنید:
+private function getUserStatusInfo($user)
+{
+    if ($user->is_active) {
+        return "🟢 حساب شما فعال است";
+    } else {
+        $reason = $user->deactivation_reason ?? 'موقت';
+        $date = $user->deactivated_at ? date('Y-m-d H:i', strtotime($user->deactivated_at)) : 'نامشخص';
+        return "🔴 حساب شما غیرفعال است\n📅 از تاریخ: $date\n📝 دلیل: $reason";
+    }
+}
+
 }
