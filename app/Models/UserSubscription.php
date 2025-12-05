@@ -28,9 +28,8 @@ class UserSubscription extends Model
         return $this->belongsTo(SubscriptionPlan::class);
     }
     
-    public function isActive()
+  public function isActive()
 {
-    // بررسی کنید expiry_date مقدار دارد
     if (!$this->expiry_date) {
         return false;
     }
@@ -51,6 +50,14 @@ class UserSubscription extends Model
     }
     
     return Carbon::now()->diffInDays($this->expiry_date, false);
+}
+
+public static function hasActiveSubscription($userId)
+{
+    return self::where('user_id', $userId)
+        ->where('status', 'active')
+        ->where('expiry_date', '>', now())
+        ->exists();
 }
     
     public function resetDailyLimits()

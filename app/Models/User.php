@@ -79,10 +79,10 @@ class User extends Model
 
     // 🔴 **متد hasActiveSubscription - اصلاح شده**
     public function hasActiveSubscription()
-    {
-        $subscription = $this->subscription()->first();
-        return $subscription && $subscription->isActive();
-    }
+{
+    $subscription = $this->getActiveSubscription();
+    return $subscription && $subscription->isActive();
+}
 
     // 🔴 **متد getActiveSubscription - اصلاح شده (همین متد باعث خطا بود)**
   public function getActiveSubscription()
