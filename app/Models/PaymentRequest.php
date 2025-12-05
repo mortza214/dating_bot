@@ -38,15 +38,28 @@ class PaymentRequest extends Model
                   ->get();
     }
     
-    public static function createRequest($userId, $planId, $amount)
-    {
+   public static function createRequest($userId, $planId = null, $amount, $type = 'subscription')
+{
+    // اگر شارژ کیف پول است و plan_id نداریم
+    if ($type === 'charge' && $planId === null) {
         return self::create([
             'user_id' => $userId,
-            'plan_id' => $planId,
+            'plan_id' => null, // یا 0
             'amount' => $amount,
-            'status' => self::STATUS_PENDING
+            'type' => $type,
+            'status' => 'pending'
         ]);
     }
+    
+    // برای خرید اشتراک
+    return self::create([
+        'user_id' => $userId,
+        'plan_id' => $planId,
+        'amount' => $amount,
+        'type' => $type,
+        'status' => 'pending'
+    ]);
+}
     
     public function approve($adminId)
     {

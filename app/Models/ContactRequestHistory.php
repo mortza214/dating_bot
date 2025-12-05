@@ -11,9 +11,13 @@ class ContactRequestHistory extends Model
         'user_id', 
         'requested_user_id', 
         'amount_paid',
-        'requested_at'
+        'requested_at',
+        'user_id', 'requested_user_id', 'amount_paid', 'used_subscription'
     ];
     
+    protected $casts = [
+    'used_subscription' => 'boolean'
+];
     public $timestamps = false;
     
     public function user()

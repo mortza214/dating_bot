@@ -1,24 +1,26 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
 class SubscriptionPlan extends Model
 {
-    protected $table = 'subscription_plans';
-    
     protected $fillable = [
-        'name', 'duration_days', 'amount', 'description', 'is_active'
+        'name', 'description', 'price', 'duration_days',
+        'max_daily_contacts', 'total_contacts',
+        'max_daily_suggestions', 'total_suggestions',
+        'is_active'
     ];
     
+    protected $casts = [
+        'price' => 'float',
+        'is_active' => 'boolean'
+    ];
+    
+    // 🔴 **اصلاح: orderBy('price') نه orderBy('amount')**
     public static function getActivePlans()
     {
-        return self::where('is_active', true)->orderBy('amount')->get();
-    }
-    
-    public static function getPlan($id)
-    {
-        return self::where('id', $id)->where('is_active', true)->first();
+        return self::where('is_active', true)->orderBy('price', 'asc')->get();
     }
 }
-?>

@@ -5,6 +5,8 @@ require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/TelegramAPI.php';
 require_once __DIR__ . '/ProfileFieldManager.php';
 //require_once __DIR__ . '/PerformanceMonitor.php';
+use Carbon\Carbon;
+use Morilog\Jalali\Jalalian;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Models\ChargeCode;
@@ -378,6 +380,43 @@ private function sendPreStartWelcome($chatId, $userId)
 
     error_log("📝 handleMessage - User state: " . $user->state . " | Text: " . $text);
 
+    //  برای شارژکیف  پول روش جدید 
+    if ($user->state === 'selecting_charge_amount') {
+        $this->handleChargeAmountSelection($user, $chatId, $text);
+        return;
+    }
+    
+    if (strpos($user->state, 'confirming_charge:') === 0) {
+        $this->handleChargeConfirmation($user, $chatId, $text);
+        return;
+    }
+
+     // 🔴 دستورات مربوط به اشتراک
+    if ($text === '💎 اشتراک من') {
+        $this->showMySubscription($user, $chatId);
+        return;
+    }
+    
+    if ($text === '💎 مشاهده پلن‌ها') {
+        $this->handleSubscription($user, $chatId);
+        return;
+    }
+    
+    if ($text === '🔄 تمدید اشتراک') {
+        $this->handleSubscription($user, $chatId);
+        return;
+    }
+    
+    if ($user->state === 'selecting_subscription_plan') {
+        $this->handleSubscriptionPlanSelection($user, $chatId, $text);
+        return;
+    }
+    
+    if (strpos($user->state, 'confirming_subscription:') === 0) {
+        $this->handleSubscriptionConfirmation($user, $chatId, $text);
+        return;
+    }
+
     // 🔴 مدیریت stateهای ویرایش پروفایل
     if (str_starts_with($user->state, 'editing_')) {
         error_log("🔄 User is editing profile field: " . $user->state);
@@ -509,7 +548,8 @@ case '▶️ فعال سازی حساب':
                 break;
 
 
-
+   
+            
 
             case '💼 کیف پول':
                 error_log("💼 Calling handleWallet");
@@ -1358,6 +1398,16 @@ elseif (strpos($data, 'view_liker:') === 0) {
     $message .= "💰 موجودی: " . number_format($wallet->balance) . " تومان\n";
     $message .= "📊 وضعیت پروفایل: " . ($actualCompletion ? "✅ تکمیل شده" : "❌ ناقص ({$completionPercent}%)") . "\n\n";
     $message .= "📱 وضعیت حساب: {$statusText}\n\n";
+
+     // 🔴 اضافه کردن وضعیت اشتراک
+    $subscription = $user->getActiveSubscription();
+    if ($subscription) {
+        $daysRemaining = $subscription->daysRemaining();
+        $message .= "💎 اشتراک: {$subscription->plan->name}\n";
+        $message .= "⏳ باقی‌مانده: {$daysRemaining} روز\n";
+    } else {
+        $message .= "🔴 اشتراک: فعال نیست\n";
+    }
     
     // 🔴 اضافه کردن آمار لایک‌ها
     $message .= "❤️ لایک‌های دریافتی: " . $receivedLikes . "\n";
@@ -1381,7 +1431,8 @@ elseif (strpos($data, 'view_liker:') === 0) {
                     ['text' => '💌 دریافت پیشنهاد']
                 ],
                 [
-                    ['text' => '📊 پروفایل من'],
+                    ['text' => '📊 پروفایل من'],   
+                    ['text' =>  '💎 اشتراک من'],
                     ['text' => '👥 سیستم دعوت']
                 ],
                 [
@@ -1405,6 +1456,7 @@ elseif (strpos($data, 'view_liker:') === 0) {
                 ],
                 [
                     ['text' => '📊 پروفایل من'],
+                    ['text' =>  '💎 اشتراک من'],
                     ['text' => '👥 سیستم دعوت']
                 ],
                 [
@@ -4125,6 +4177,44 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
     }
     private function showSuggestion($user, $chatId, $suggestedUser)
 {
+    // 🔴 **بررسی اشتراک فعال**
+    if (!$user->hasActiveSubscription()) {
+        $message = "❌ **برای مشاهده پیشنهادات نیاز به اشتراک فعال دارید!**\n\n";
+        $message .= "💎 با خرید اشتراک می‌توانید:\n";
+        $message .= "• پیشنهادات نامحدود دریافت کنید\n";
+        $message .= "• اطلاعات تماس کاربران را مشاهده کنید\n";
+        $message .= "• از امکانات ویژه ربات استفاده کنید\n\n";
+        $message .= "📋 برای مشاهده پلن‌های اشتراک، از منوی اصلی گزینه '💎 اشتراک من' را انتخاب کنید.";
+        
+        $this->telegram->sendMessage($chatId, $message);
+        return;
+    }
+    
+    $subscription = $user->getActiveSubscription();
+    
+    // 🔴 **بررسی سهمیه پیشنهادات**
+    if (!$subscription->canViewSuggestion()) {
+        $stats = $subscription->getUsageStats();
+        
+        $message = "❌ **سهمیه پیشنهادات شما تمام شده!**\n\n";
+        $message .= "📊 **سهمیه روزانه:**\n";
+        $message .= "• استفاده شده: {$stats['daily_suggestions']['used']} از {$stats['daily_suggestions']['total']}\n";
+        $message .= "• باقی‌مانده: {$stats['daily_suggestions']['remaining']}\n\n";
+        $message .= "📊 **سهمیه کلی:**\n";
+        $message .= "• استفاده شده: {$stats['total_suggestions']['used']} از {$stats['total_suggestions']['total']}\n";
+        $message .= "• باقی‌مانده: {$stats['total_suggestions']['remaining']}\n\n";
+        $message .= "⏰ سهمیه روزانه هر 24 ساعت شارژ می‌شود.\n";
+        $message .= "🔄 برای افزایش سهمیه، می‌توانید اشتراک خود را ارتقا دهید.";
+        
+        $this->telegram->sendMessage($chatId, $message);
+        return;
+    }
+    
+    // 🔴 **استفاده از سهمیه**
+    if (!$subscription->useSuggestionView()) {
+        $this->telegram->sendMessage($chatId, "❌ خطا در استفاده از سهمیه پیشنهادات!");
+        return;
+    }
     $cost = $this->getContactRequestCost();
 
     $message = "📋 **مشخصات:**\n\n";
@@ -4706,47 +4796,124 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
         }
     }
     private function handleContactRequest($user, $chatId, $suggestedUserId)
-    {
-        $cost = $this->getContactRequestCost();
-        $wallet = $user->getWallet();
-        $suggestedUser = User::find($suggestedUserId);
+{
+    $cost = $this->getContactRequestCost();
+    $wallet = $user->getWallet();
+    $suggestedUser = User::find($suggestedUserId);
 
-        if (!$suggestedUser) {
-            $this->telegram->sendMessage($chatId, "❌ کاربر پیدا نشد");
-            return;
-        }
-
-        // 🔴 چک کردن آیا قبلاً درخواست داده شده
-        if (ContactRequestHistory::hasRequestedBefore($user->id, $suggestedUserId)) {
-            // اگر قبلاً پرداخت کرده، اطلاعات رو رایگان نمایش بده
-            $this->showContactInfo($user, $chatId, $suggestedUserId, 0);
-            return;
-        }
-
-        // 🔴 چک کردن موجودی کیف پول
-        if (!$wallet->hasEnoughBalance($cost)) {
-            $message = "📞 **درخواست اطلاعات تماس**\n\n";
-            $message .= "❌ موجودی کیف پول شما کافی نیست!\n";
-            $message .= "💰 هزینه هر درخواست: " . number_format($cost) . " تومان\n";
-            $message .= "💳 موجودی فعلی: " . number_format($wallet->balance) . " تومان\n\n";
-            $message .= "لطفاً ابتدا کیف پول خود را شارژ کنید.";
-
-            $keyboard = [
-                'inline_keyboard' => [
-                    [
-                        ['text' => '💰 شارژ کیف پول', 'callback_data' => 'wallet_charge'],
-                        ['text' => '🔙 بازگشت', 'callback_data' => 'main_menu']
-                    ]
-                ]
-            ];
-
-            $this->telegram->sendMessage($chatId, $message, $keyboard);
-            return;
-        }
-
-        // 🔴 نمایش پیام تأیید قبل از کسر مبلغ
-        $this->showConfirmationMessage($user, $chatId, $suggestedUser, $cost);
+    if (!$suggestedUser) {
+        $this->telegram->sendMessage($chatId, "❌ کاربر پیدا نشد");
+        return;
     }
+
+    // 🔴 **بررسی اشتراک فعال**
+    if (!$user->hasActiveSubscription()) {
+        $message = "❌ **برای درخواست اطلاعات تماس نیاز به اشتراک فعال دارید!**\n\n";
+        $message .= "💎 با خرید اشتراک می‌توانید:\n";
+        $message .= "• اطلاعات تماس کاربران را مشاهده کنید\n";
+        $message .= "• پیشنهادات نامحدود دریافت کنید\n";
+        $message .= "• از امکانات ویژه ربات استفاده کنید\n\n";
+        $message .= "📋 برای مشاهده پلن‌های اشتراک، از منوی اصلی گزینه '💎 اشتراک من' را انتخاب کنید.";
+        
+        $this->telegram->sendMessage($chatId, $message);
+        return;
+    }
+    
+    $subscription = $user->getActiveSubscription();
+    
+    // 🔴 **بررسی سهمیه درخواست تماس**
+    if (!$subscription->canRequestContact()) {
+        $stats = $subscription->getUsageStats();
+        
+        $message = "❌ **سهمیه درخواست تماس شما تمام شده!**\n\n";
+        $message .= "📊 **سهمیه روزانه:**\n";
+        $message .= "• استفاده شده: {$stats['daily_contacts']['used']} از {$stats['daily_contacts']['total']}\n";
+        $message .= "• باقی‌مانده: {$stats['daily_contacts']['remaining']}\n\n";
+        $message .= "📊 **سهمیه کلی:**\n";
+        $message .= "• استفاده شده: {$stats['total_contacts']['used']} از {$stats['total_contacts']['total']}\n";
+        $message .= "• باقی‌مانده: {$stats['total_contacts']['remaining']}\n\n";
+        $message .= "⏰ سهمیه روزانه هر 24 ساعت شارژ می‌شود.\n";
+        $message .= "🔄 برای افزایش سهمیه، می‌توانید اشتراک خود را ارتقا دهید.";
+        
+        $this->telegram->sendMessage($chatId, $message);
+        return;
+    }
+
+    // 🔴 چک کردن آیا قبلاً درخواست داده شده
+    if (ContactRequestHistory::hasRequestedBefore($user->id, $suggestedUserId)) {
+        // اگر قبلاً پرداخت کرده، اطلاعات رو رایگان نمایش بده
+        $this->showContactInfo($user, $chatId, $suggestedUserId, 0);
+        return;
+    }
+
+    // 🔴 **استفاده از سهمیه اشتراک (به جای کسر از کیف پول)**
+    if (!$subscription->useContactRequest()) {
+        $this->telegram->sendMessage($chatId, "❌ خطا در استفاده از سهمیه درخواست تماس!");
+        return;
+    }
+
+    // 🔴 نمایش اطلاعات تماس
+    $contactInfo = $this->getContactInfo($suggestedUser);
+    
+    // ثبت در تاریخچه
+    ContactRequestHistory::create([
+        'user_id' => $user->id,
+        'requested_user_id' => $suggestedUserId,
+        'amount' => $cost,
+        'used_subscription' => true // نشان می‌دهد از سهمیه اشتراک استفاده شده
+    ]);
+    
+    $message = "✅ **اطلاعات تماس با موفقیت دریافت شد!**\n\n";
+    $message .= "📞 اطلاعات تماس کاربر:\n\n";
+    $message .= $contactInfo . "\n\n";
+    $message .= "📊 **سهمیه باقی‌مانده:**\n";
+    $message .= "• درخواست تماس روزانه: {$subscription->remaining_daily_contacts}/{$subscription->plan->max_daily_contacts}\n";
+    $message .= "• درخواست تماس کلی: {$subscription->remaining_total_contacts}/{$subscription->plan->total_contacts}";
+    
+    $this->telegram->sendMessage($chatId, $message);
+    
+    // همچنین می‌توانید یک callback پاسخ دهید اگر از callback_query استفاده می‌کنید
+    if (isset($callbackQuery)) {
+        $callbackQueryId = $callbackQuery['id'];
+        $this->telegram->answerCallbackQuery($callbackQueryId, [
+            'text' => "✅ اطلاعات تماس دریافت شد!",
+            'show_alert' => false
+        ]);
+    }
+}
+private function getContactInfo($user)
+{
+    $info = "👤 **{$user->first_name}";
+    
+    if ($user->last_name) {
+        $info .= " {$user->last_name}";
+    }
+    
+    $info .= "**\n\n";
+    
+    // نمایش اطلاعات تماس (مثلاً موبایل)
+    if ($user->mobile) {
+        $info .= "📱 موبایل: {$user->mobile}\n";
+    }
+    
+    // نمایش آیدی تلگرام
+    if ($user->username) {
+        $info .= "🔗 آیدی تلگرام: @{$user->username}\n";
+    }
+    
+    // اطلاعات اضافی
+    if ($user->age) {
+        $info .= "📅 سن: {$user->age}\n";
+    }
+    
+    if ($user->city) {
+        $info .= "🏙️ شهر: {$user->city}\n";
+    }
+    
+    $info .= "\n💡 می‌توانید از طریق اطلاعات بالا با کاربر در ارتباط باشید.";
+    
+    return $info;
+}
 
 
     // 🔴 متد جدید برای پردازش پرداخت پس از تأیید
@@ -5618,53 +5785,35 @@ private function cleanupExpiredSessions()
 
     // ==================== سیستم جدید شارژ کیف پول ====================
 
-   private function handleCharge($user, $chatId)
+  private function handleCharge($user, $chatId)
 {
-    $plans = \App\Models\SubscriptionPlan::getActivePlans();
-
-    if ($plans->isEmpty()) {
-        $this->telegram->sendMessage($chatId, "❌ در حال حاضر هیچ پلن اشتراکی فعال نیست.");
-        return;
-    }
-
-    $message = "💰 **خرید اشتراک و شارژ کیف پول**\n\n";
-    $message .= "لطفاً یکی از پلن‌های زیر را انتخاب کنید:\n\n";
-
-    foreach ($plans as $plan) {
-        $message .= "📦 **{$plan->name}**\n";
-        $message .= "⏰ مدت: {$plan->duration_days} روز\n";
-        $message .= "💵 مبلغ: " . number_format($plan->amount) . " تومان\n";
-        $message .= "📝 {$plan->description}\n\n";
-    }
-
-    // ایجاد کیبورد ثابت با دو دکمه در هر ردیف
-    $keyboardRows = [];
-    $tempRow = [];
-    
-    // پاک کردن sessionهای قدیمی پلن
-    $this->clearUserButtonSessions($user->id, 'plan');
-    
-    foreach ($plans as $plan) {
-        $buttonText = "📦 {$plan->name}";
-        $tempRow[] = ['text' => $buttonText];
-        
-        // ذخیره اطلاعات دکمه با نوع 'plan'
-        $this->saveButtonInfo($user->id, $buttonText, null, $plan->id, 'plan');
-        
-        if (count($tempRow) === 2) {
-            $keyboardRows[] = $tempRow;
-            $tempRow = [];
-        }
-    }
-    
-    if (!empty($tempRow)) {
-        $keyboardRows[] = $tempRow;
-    }
-
-    // دکمه بازگشت
-    $keyboardRows[] = [
-        ['text' => '🔙 بازگشت به کیف پول']
+    // مقادیر پیشنهادی برای شارژ
+    $chargeAmounts = [
+        100000 => '💵 ۱۰۰,۰۰۰ تومان',
+        200000 => '💵 ۲۰۰,۰۰۰ تومان', 
+        500000 => '💵 ۵۰۰,۰۰۰ تومان',
+        1000000 => '💵 ۱,۰۰۰,۰۰۰ تومان'
     ];
+    
+    $message = "💰 **شارژ کیف پول**\n\n";
+    $message .= "لطفاً یکی از مبالغ زیر را برای شارژ انتخاب کنید:\n\n";
+    
+    foreach ($chargeAmounts as $amount => $label) {
+        $message .= "{$label}\n";
+    }
+    
+    $message .= "\n⚠️ توجه: پس از انتخاب مبلغ، درخواست شما برای تأیید به مدیران ارسال می‌شود.\n";
+    $message .= "✅ پس از تأیید مدیر، مبلغ به کیف پول شما اضافه خواهد شد.";
+
+    // ایجاد کیبورد ثابت
+    $keyboardRows = [];
+    
+    foreach ($chargeAmounts as $amount => $label) {
+        $keyboardRows[] = [['text' => $label]];
+    }
+    
+    // دکمه بازگشت
+    $keyboardRows[] = [['text' => '🔙 بازگشت به کیف پول']];
 
     $keyboard = [
         'keyboard' => $keyboardRows,
@@ -5673,8 +5822,92 @@ private function cleanupExpiredSessions()
     ];
 
     $this->telegram->sendMessage($chatId, $message, $keyboard);
+    
+    // تغییر state کاربر
+    $user->update(['state' => 'selecting_charge_amount']);
+}
+private function handleChargeAmountSelection($user, $chatId, $buttonText)
+{
+    // مبلغ را از دکمه استخراج می‌کنیم
+    $amountsMapping = [
+        '💵 ۱۰۰,۰۰۰ تومان' => 100000,
+        '💵 ۲۰۰,۰۰۰ تومان' => 200000,
+        '💵 ۵۰۰,۰۰۰ تومان' => 500000,
+        '💵 ۱,۰۰۰,۰۰۰ تومان' => 1000000
+    ];
+    
+    if (!isset($amountsMapping[$buttonText])) {
+        $this->telegram->sendMessage($chatId, "❌ مبلغ انتخاب شده نامعتبر است.");
+        $this->handleWallet($user, $chatId);
+        return;
+    }
+    
+    $amount = $amountsMapping[$buttonText];
+    
+    // نمایش تأیید
+    $formattedAmount = number_format($amount);
+    $message = "💰 **شارژ کیف پول**\n\n";
+    $message .= "💵 مبلغ درخواستی: {$formattedAmount} تومان\n\n";
+    $message .= "⚠️ پس از تأیید، درخواست شما برای مدیران ارسال می‌شود.\n";
+    $message .= "✅ پس از تأیید مدیر، مبلغ به کیف پول شما اضافه خواهد شد.\n\n";
+    $message .= "آیا از شارژ کیف پول به مبلغ {$formattedAmount} تومان اطمینان دارید؟";
+
+    // کیبورد ثابت برای تأیید
+    $keyboard = [
+        'keyboard' => [
+            [['text' => '✅ بله، تأیید می‌کنم']],
+            [['text' => '❌ خیر، انصراف']]
+        ],
+        'resize_keyboard' => true,
+        'one_time_keyboard' => false
+    ];
+
+    $this->telegram->sendMessage($chatId, $message, $keyboard);
+    
+    // ذخیره مبلغ انتخابی در state کاربر
+    $user->update(['state' => 'confirming_charge:' . $amount]);
+
 }
 
+
+private function handleChargeConfirmation($user, $chatId, $buttonText)
+{
+    // بررسی state کاربر
+    if (strpos($user->state, 'confirming_charge:') !== 0) {
+        $this->telegram->sendMessage($chatId, "❌ درخواست نامعتبر است.");
+        $this->handleWallet($user, $chatId);
+        return;
+    }
+    
+    // استخراج مبلغ از state
+    $amount = (int) str_replace('confirming_charge:', '', $user->state);
+    
+    if ($buttonText === '✅ بله، تأیید می‌کنم') {
+        // ایجاد درخواست پرداخت (شارژ)
+        // توجه: متد createRequest باید با type 'charge' فراخوانی شود
+        $paymentRequest = \App\Models\PaymentRequest::createRequest($user->id, null, $amount, 'charge');
+        
+        if ($paymentRequest) {
+            // ارسال پیام به مدیران با استفاده از متد موجود شما
+            $this->notifyAdminsAboutPayment($user, $paymentRequest);
+
+            $message = "✅ **درخواست شارژ کیف پول شما ثبت شد**\n\n";
+            $message .= "💵 مبلغ: " . number_format($amount) . " تومان\n";
+            $message .= "⏰ وضعیت: در انتظار تأیید مدیر\n\n";
+            $message .= "📞 پیام به مدیران ارسال شد. پس از تأیید، کیف پول شما شارژ خواهد شد.\n\n";
+            $message .= "🕐 زمان معمول تأیید: 1-2 ساعت";
+        } else {
+            $message = "❌ خطا در ثبت درخواست شارژ. لطفاً مجدد تلاش کنید.";
+        }
+    } else {
+        $message = "درخواست شارژ لغو شد.";
+    }
+    
+    // بازگشت به منوی کیف پول
+    $user->update(['state' => 'wallet_menu']);
+    $this->handleWallet($user, $chatId);
+    $this->telegram->sendMessage($chatId, $message);
+}
 
     private function handlePlanSelection($user, $chatId, $buttonText)
 {
@@ -7247,6 +7480,230 @@ private function showLikerProfile($user, $chatId, $likerId)
     $user->update(['state' => 'viewing_liker:' . $likerId]);
 }
 
+private function handleSubscription($user, $chatId)
+{
+    $plans = \App\Models\SubscriptionPlan::getActivePlans();
+    
+    if ($plans->isEmpty()) {
+        $this->telegram->sendMessage($chatId, "⚠️ در حال حاضر پلن اشتراکی فعالی وجود ندارد.");
+        return;
+    }
+    
+    $message = "📋 **لیست پلن‌های اشتراک:**\n\n";
+    
+    foreach ($plans as $plan) {
+        $message .= "🔸 **{$plan->name}**\n";
+        $message .= "💰 قیمت: " . number_format($plan->price) . " تومان\n";
+        $message .= "⏳ مدت: {$plan->duration_days} روز\n";
+        $message .= "📞 درخواست تماس روزانه: {$plan->max_daily_contacts}\n";
+        $message .= "📞 درخواست تماس کل: {$plan->total_contacts}\n";
+        $message .= "👥 پیشنهادات روزانه: {$plan->max_daily_suggestions}\n";
+        $message .= "👥 پیشنهادات کل: {$plan->total_suggestions}\n";
+        $message .= "────────────\n";
+    }
+    
+    $message .= "\nبرای خرید هر پلن، روی دکمه مربوطه کلیک کنید:";
+    
+    // ایجاد کیبورد ثابت
+    $keyboardRows = [];
+    
+    foreach ($plans as $plan) {
+        $label = "💎 {$plan->name}";
+        $keyboardRows[] = [['text' => $label]];
+    }
+    
+    $keyboardRows[] = [['text' => '🔙 بازگشت']];
 
+    $keyboard = [
+        'keyboard' => $keyboardRows,
+        'resize_keyboard' => true,
+        'one_time_keyboard' => false
+    ];
 
+    $this->telegram->sendMessage($chatId, $message, $keyboard);
+    
+    // تنظیم state
+    $user->update(['state' => 'selecting_subscription_plan']);
+}
+
+private function handleSubscriptionPlanSelection($user, $chatId, $buttonText)
+{
+    // استخراج نام پلن از دکمه (مثلاً "💎 پایه")
+    $planName = str_replace('💎 ', '', $buttonText);
+    
+    $plan = \App\Models\SubscriptionPlan::where('name', $planName)->first();
+    
+    if (!$plan) {
+        $this->telegram->sendMessage($chatId, "❌ پلن انتخابی یافت نشد.");
+        $this->handleSubscription($user, $chatId);
+        return;
+    }
+    
+    // بررسی موجودی کیف پول
+    $wallet = $user->getWallet();
+    
+    $message = "💎 **پلن انتخابی:** {$plan->name}\n\n";
+    $message .= "💰 قیمت: " . number_format($plan->price) . " تومان\n";
+    $message .= "⏳ مدت: {$plan->duration_days} روز\n";
+    $message .= "📞 درخواست تماس روزانه: {$plan->max_daily_contacts}\n";
+    $message .= "📞 درخواست تماس کل: {$plan->total_contacts}\n";
+    $message .= "👥 پیشنهادات روزانه: {$plan->max_daily_suggestions}\n";
+    $message .= "👥 پیشنهادات کل: {$plan->total_suggestions}\n";
+    $message .= "📝 {$plan->description}\n\n";
+    
+    $message .= "💰 **موجودی فعلی شما:** " . number_format($wallet->balance) . " تومان\n\n";
+    
+    if ($wallet->balance < $plan->price) {
+        $message .= "❌ موجودی کیف پول شما کافی نیست!\n";
+        $message .= "💵 برای شارژ کیف پول، از منوی کیف پول استفاده کنید.";
+        
+        $keyboard = [
+            'keyboard' => [
+                [['text' => '💼 کیف پول']],
+                [['text' => '🔙 بازگشت']]
+            ],
+            'resize_keyboard' => true
+        ];
+    } else {
+        $message .= "آیا مایل به خرید این اشتراک هستید؟";
+        
+        $keyboard = [
+            'keyboard' => [
+                [['text' => '✅ بله، خرید می‌کنم']],
+                [['text' => '❌ خیر، انصراف']]
+            ],
+            'resize_keyboard' => true
+        ];
+    }
+    
+    $this->telegram->sendMessage($chatId, $message, $keyboard);
+    
+    // ذخیره plan_id در state
+    $user->update(['state' => 'confirming_subscription:' . $plan->id]);
+}
+private function handleSubscriptionConfirmation($user, $chatId, $buttonText)
+{
+    // بررسی state کاربر
+    if (strpos($user->state, 'confirming_subscription:') !== 0) {
+        $this->telegram->sendMessage($chatId, "❌ درخواست نامعتبر است.");
+        $this->showMainMenu($user, $chatId);
+        return;
+    }
+    
+    // استخراج plan_id از state
+    $planId = (int) str_replace('confirming_subscription:', '', $user->state);
+    $plan = \App\Models\SubscriptionPlan::find($planId);
+    
+    if (!$plan) {
+        $this->telegram->sendMessage($chatId, "❌ پلن انتخابی یافت نشد.");
+        $this->showMainMenu($user, $chatId);
+        return;
+    }
+    
+    if ($buttonText === '✅ بله، خرید می‌کنم') {
+        $wallet = $user->getWallet();
+        
+        // بررسی مجدد موجودی
+        if ($wallet->balance < $plan->price) {
+            $this->telegram->sendMessage($chatId, "❌ موجودی کیف پول شما کافی نیست!");
+            $this->handleWallet($user, $chatId);
+            return;
+        }
+        
+        // کسر از کیف پول
+        $wallet->decrement('balance', $plan->price);
+        
+        // غیرفعال کردن اشتراک قبلی (اگر وجود دارد)
+        \App\Models\UserSubscription::where('user_id', $user->id)
+            ->where('status', 'active')
+            ->update(['status' => 'expired']);
+        
+        // ایجاد اشتراک جدید
+           $expiryDate = \Carbon\Carbon::now()->addDays($plan->duration_days);
+    
+    $subscription = \App\Models\UserSubscription::create([
+        'user_id' => $user->id,
+        'plan_id' => $plan->id,
+        'start_date' => \Carbon\Carbon::now(),
+        'expiry_date' => $expiryDate,
+        'status' => 'active',
+        'remaining_daily_contacts' => $plan->max_daily_contacts,
+        'remaining_total_contacts' => $plan->total_contacts,
+        'remaining_daily_suggestions' => $plan->max_daily_suggestions,
+        'remaining_total_suggestions' => $plan->total_suggestions,
+        'last_reset_date' => \Carbon\Carbon::now()
+    ]);
+    
+    // نمایش تاریخ شمسی
+    $jdate = \Morilog\Jalali\Jalalian::fromDateTime($expiryDate);
+    
+    $message = "🎉 **خرید اشتراک با موفقیت انجام شد!**\n\n";
+    $message .= "💎 اشتراک: {$plan->name}\n";
+    $message .= "💰 مبلغ کسر شده: " . number_format($plan->price) . " تومان\n";
+    $message .= "📊 موجودی جدید کیف پول: " . number_format($wallet->balance) . " تومان\n";
+    $message .= "⏳ اعتبار تا: " . $jdate->format('Y/m/d') . "\n\n";
+    $message .= "✅ اشتراک شما فعال شد و می‌توانید از امکانات ویژه استفاده کنید.";
+        
+    } elseif ($buttonText === '❌ خیر، انصراف') {
+        $message = "خرید اشتراک لغو شد.";
+    } else {
+        $message = "❌ دستور نامعتبر است.";
+    }
+    
+    // بازگشت به منوی اصلی
+    $user->update(['state' => 'main_menu']);
+    $this->showMainMenu($user, $chatId);
+    $this->telegram->sendMessage($chatId, $message);
+}
+ private function showMySubscription($user, $chatId)
+{
+    $subscription = $user->getActiveSubscription();
+    
+    if (!$subscription) {
+        $message = "📋 **وضعیت اشتراک شما:**\n\n";
+        $message .= "🔴 شما هیچ اشتراک فعالی ندارید.\n\n";
+        $message .= "💡 با خرید اشتراک می‌توانید از امکانات زیر استفاده کنید:\n";
+        $message .= "• مشاهده اطلاعات تماس کاربران\n";
+        $message .= "• دریافت پیشنهادات بیشتر\n";
+        $message .= "• استفاده نامحدود از ربات\n\n";
+        $message .= "برای مشاهده پلن‌های اشتراک روی دکمه زیر کلیک کنید:";
+        
+        $keyboard = [
+            'keyboard' => [
+                [['text' => '💎 مشاهده پلن‌ها']],
+                [['text' => '💼 کیف پول']],
+                [['text' => '🔙 منوی اصلی']]
+            ],
+            'resize_keyboard' => true
+        ];
+    } else {
+        $plan = $subscription->plan;
+        $stats = $subscription->getUsageStats();
+        
+        $message = "📋 **وضعیت اشتراک شما:**\n\n";
+        $message .= "✅ اشتراک فعال: **{$plan->name}**\n";
+        $message .= "⏳ روزهای باقی‌مانده: " . $subscription->daysRemaining() . " روز\n";
+        $message .= "📅 اعتبار تا: " . jdate('Y/m/d', strtotime($subscription->expiry_date)) . "\n\n";
+        
+        $message .= "📊 **سهمیه‌های مصرفی:**\n\n";
+        
+        $message .= "📞 **درخواست تماس:**\n";
+        $message .= "   امروز: {$stats['daily_contacts']['used']}/{$stats['daily_contacts']['total']}\n";
+        $message .= "   کل: {$stats['total_contacts']['used']}/{$stats['total_contacts']['total']}\n\n";
+        
+        $message .= "👥 **پیشنهادات:**\n";
+        $message .= "   امروز: {$stats['daily_suggestions']['used']}/{$stats['daily_suggestions']['total']}\n";
+        $message .= "   کل: {$stats['total_suggestions']['used']}/{$stats['total_suggestions']['total']}\n";
+        
+        $keyboard = [
+            'keyboard' => [
+                [['text' => '🔄 تمدید اشتراک']],
+                [['text' => '🔙 منوی اصلی']]
+            ],
+            'resize_keyboard' => true
+        ];
+    }
+    
+    $this->telegram->sendMessage($chatId, $message, $keyboard);
+}
 }

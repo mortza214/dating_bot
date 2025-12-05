@@ -4,6 +4,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Carbon\Carbon;
 
 class User extends Model
 {
@@ -29,17 +30,17 @@ class User extends Model
         'smoking',
         'children',
         'relationship_goal',
-          'telegram_photo_id',
+        'telegram_photo_id',
         // فیلدهای جدید نام و نام خانوادگی:
         'first_name_display',
         'health_status',
-        'mobile'
-
-
+        'mobile',
+        'is_active' // 🔴 این فیلد را اضافه کردم
     ];
 
     protected $casts = [
-        'is_profile_completed' => 'boolean'
+        'is_profile_completed' => 'boolean',
+        'is_active' => 'boolean' // 🔴 این خط را اضافه کردم
     ];
 
     public function getWallet()
@@ -52,7 +53,6 @@ class User extends Model
         return $this->hasMany(Transaction::class);
     }
 
-    // 🔴 اضافه کردن روابط جدید به مدل User موجود
     public function suggestions()
     {
         return $this->hasMany(UserSuggestion::class);
@@ -68,15 +68,43 @@ class User extends Model
         return $this->hasOne(UserFilter::class);
     }
 
+    // 🔴 **رابطه اشتراک - اصلاح شده**
     public function subscription()
     {
-        return $this->hasOne(Subscription::class);
+        return $this->hasOne(UserSubscription::class, 'user_id')
+            ->where('status', 'active')
+            ->where('expiry_date', '>', Carbon::now())
+            ->latest();
     }
 
-    // 🔴 اضافه کردن متدهای کمکی جدید
+    // 🔴 **متد hasActiveSubscription - اصلاح شده**
     public function hasActiveSubscription()
     {
-        return $this->subscription && $this->subscription->isValid();
+        $subscription = $this->subscription()->first();
+        return $subscription && $subscription->isActive();
+    }
+
+    // 🔴 **متد getActiveSubscription - اصلاح شده (همین متد باعث خطا بود)**
+    public function getActiveSubscription()
+    {
+        try {
+            return $this->subscription()->first();
+        } catch (\Exception $e) {
+            // اگر خطا داد، مستقیم از دیتابیس بگیریم
+            return UserSubscription::where('user_id', $this->id)
+                ->where('status', 'active')
+                ->where('expiry_date', '>', Carbon::now())
+                ->orderBy('created_at', 'DESC')
+                ->first();
+        }
+    }
+
+    // 🔴 **متد ساده‌تر برای تست**
+    public function activeSubscription()
+    {
+        return UserSubscription::where('user_id', $this->id)
+            ->where('status', 'active')
+            ->first();
     }
 
     public function hasCustomFilters()
@@ -89,6 +117,7 @@ class User extends Model
     {
         return $this->filters ? $this->filters->filters : [];
     }
+    
     public function referrals()
     {
         return $this->hasMany(Referral::class, 'referrer_id');
@@ -124,15 +153,12 @@ class User extends Model
         return self::where('invite_code', $code)->first();
     }
 
-    // در کلاس User (App\Models\User) متدهای زیر را اضافه کنید:
-
     public function getProfilePhoto()
     {
         if ($this->telegram_photo_id) {
             return $this->telegram_photo_id;
         }
 
-        // اگر عکس پروفایل تلگرام وجود ندارد، از آواتار پیشفرض استفاده کنید
         return null;
     }
 
@@ -148,89 +174,121 @@ class User extends Model
     {
         return !empty($this->telegram_photo_id);
     }
+    
     public function deductFromWallet($amount, $description = 'کسر اعتبار')
-{
-    try {
-        \Illuminate\Support\Facades\DB::transaction(function () use ($amount, $description) {
-            // دریافت کیف پول با قفل برای جلوگیری از race condition
-            $wallet = \App\Models\Wallet::where('user_id', $this->id)->lockForUpdate()->first();
-            
-            if (!$wallet) {
-                throw new \Exception('کیف پول یافت نشد');
-            }
+    {
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($amount, $description) {
+                // دریافت کیف پول با قفل برای جلوگیری از race condition
+                $wallet = \App\Models\Wallet::where('user_id', $this->id)->lockForUpdate()->first();
+                
+                if (!$wallet) {
+                    throw new \Exception('کیف پول یافت نشد');
+                }
 
-            if ($wallet->balance < $amount) {
-                throw new \Exception('موجودی کافی نیست');
-            }
+                if ($wallet->balance < $amount) {
+                    throw new \Exception('موجودی کافی نیست');
+                }
 
-            // کسر از کیف پول
-            $wallet->balance -= $amount;
-            $wallet->save();
+                // کسر از کیف پول
+                $wallet->balance -= $amount;
+                $wallet->save();
 
-            // ثبت تراکنش
-            \App\Models\Transaction::create([
-                'user_id' => $this->id,
-                'amount' => -$amount,
-                'type' => 'deduction',
-                'description' => $description
-            ]);
-        });
+                // ثبت تراکنش
+                \App\Models\Transaction::create([
+                    'user_id' => $this->id,
+                    'amount' => -$amount,
+                    'type' => 'deduction',
+                    'description' => $description
+                ]);
+            });
 
-        return true;
-    } catch (\Exception $e) {
-        throw new \Exception('خطا در کسر از کیف پول: ' . $e->getMessage());
+            return true;
+        } catch (\Exception $e) {
+            throw new \Exception('خطا در کسر از کیف پول: ' . $e->getMessage());
+        }
     }
-}
-// در کلاس User (app/Models/User.php)
-// public function deactivate($reason = 'موقت')
-// {
-//     try {
-//         $pdo = self::getPDO();
-//         $sql = "UPDATE users SET is_active = 0, deactivation_reason = ?, deactivated_at = NOW() WHERE telegram_id = ?";
-//         $stmt = $pdo->prepare($sql);
-//         return $stmt->execute([$reason, $this->telegram_id]);
-//     } catch (\Exception $e) {
-//         error_log("Error deactivating user: " . $e->getMessage());
-//         return false;
-//     }
-// }
 
-// public function activate()
-// {
-//     try {
-//         $pdo = self::getPDO();
-//         $sql = "UPDATE users SET is_active = 1, deactivation_reason = NULL, deactivated_at = NULL WHERE telegram_id = ?";
-//         $stmt = $pdo->prepare($sql);
-//         return $stmt->execute([$this->telegram_id]);
-//     } catch (\Exception $e) {
-//         error_log("Error activating user: " . $e->getMessage());
-//         return false;
-//     }
-// }
-
-public function isActive()
-{
-    return (bool) $this->is_active;
-}
-
-public function getStatusInfo()
-{
-    if ($this->is_active) {
-        return "🟢 حساب شما فعال است";
-    } else {
-        $reason = $this->deactivation_reason ?? 'موقت';
-        $date = $this->deactivated_at ? date('Y-m-d H:i', strtotime($this->deactivated_at)) : 'نامشخص';
-        return "🔴 حساب شما غیرفعال است\n📅 از تاریخ: $date\n📝 دلیل: $reason";
+    public function isActive()
+    {
+        return (bool) $this->is_active;
     }
-}
-public function likesGiven()
-{
-    return $this->hasMany(Like::class, 'liker_id');
-}
 
-public function likesReceived()
-{
-    return $this->hasMany(Like::class, 'liked_id');
-}
+    public function getStatusInfo()
+    {
+        if ($this->is_active) {
+            return "🟢 حساب شما فعال است";
+        } else {
+            $reason = $this->deactivation_reason ?? 'موقت';
+            $date = $this->deactivated_at ? date('Y-m-d H:i', strtotime($this->deactivated_at)) : 'نامشخص';
+            return "🔴 حساب شما غیرفعال است\n📅 از تاریخ: $date\n📝 دلیل: $reason";
+        }
+    }
+    
+    public function likesGiven()
+    {
+        return $this->hasMany(Like::class, 'liker_id');
+    }
 
+    public function likesReceived()
+    {
+        return $this->hasMany(Like::class, 'liked_id');
+    }
+    
+    // 🔴 **متد کمکی برای چک کردن دسترسی اشتراک**
+    public function checkSubscriptionAccess($feature)
+    {
+        $subscription = $this->getActiveSubscription();
+        
+        if (!$subscription) {
+            return [
+                'allowed' => false,
+                'message' => "❌ برای استفاده از این امکان، نیاز به اشتراک فعال دارید.\n💎 از منوی اصلی گزینه 'اشتراک من' را انتخاب کنید."
+            ];
+        }
+        
+        switch ($feature) {
+            case 'request_contact':
+                if (!$subscription->canRequestContact()) {
+                    return [
+                        'allowed' => false,
+                        'message' => "❌ سهمیه درخواست تماس شما تمام شده!\n📊 برای مشاهده سهمیه باقی‌مانده، از منوی اصلی گزینه 'اشتراک من' را انتخاب کنید."
+                    ];
+                }
+                break;
+                
+            case 'view_suggestion':
+                if (!$subscription->canViewSuggestion()) {
+                    return [
+                        'allowed' => false,
+                        'message' => "❌ سهمیه مشاهده پیشنهادات شما تمام شده!\n📊 برای مشاهده سهمیه باقی‌مانده، از منوی اصلی گزینه 'اشتراک من' را انتخاب کنید."
+                    ];
+                }
+                break;
+        }
+        
+        return ['allowed' => true, 'message' => ''];
+    }
+    
+    // 🔴 **متد جدید: دریافت آمار اشتراک**
+    public function getSubscriptionStats()
+    {
+        $subscription = $this->getActiveSubscription();
+        
+        if (!$subscription) {
+            return [
+                'has_subscription' => false,
+                'plan_name' => null,
+                'days_remaining' => 0,
+                'expiry_date' => null
+            ];
+        }
+        
+        return [
+            'has_subscription' => true,
+            'plan_name' => $subscription->plan->name ?? 'نامشخص',
+            'days_remaining' => $subscription->daysRemaining(),
+            'expiry_date' => $subscription->expiry_date
+        ];
+    }
 }
