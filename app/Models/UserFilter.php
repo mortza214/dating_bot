@@ -39,35 +39,51 @@ class UserFilter
     }
     
     public static function saveFilters($userId, $filters)
-    {
-        $pdo = self::getPDO();
-        
-        // 🔴 تغییر اساسی: ذخیره همه فیلترها در یک فیلد JSON
-        $filtersJson = json_encode($filters, JSON_UNESCAPED_UNICODE);
-        error_log("💾 ذخیره فیلترها برای کاربر {$userId}: " . $filtersJson);
-        
-        // بررسی وجود رکورد قبلی
-        $checkSql = "SELECT id FROM user_filters WHERE user_id = ?";
-        $checkStmt = $pdo->prepare($checkSql);
-        $checkStmt->execute([$userId]);
-        $existing = $checkStmt->fetch(\PDO::FETCH_OBJ);
-        
-        if ($existing) {
-            // آپدیت رکورد موجود
-            $updateSql = "UPDATE user_filters SET filters = ?, updated_at = NOW() WHERE user_id = ?";
-            $updateStmt = $pdo->prepare($updateSql);
-            $result = $updateStmt->execute([$filtersJson, $userId]);
-            error_log("🔵 آپدیت رکورد موجود: " . ($result ? "موفق" : "ناموفق"));
-            return $result;
+{
+    $pdo = self::getPDO();
+    
+    // 🔴 DECODE کردن همه مقادیر قبل از ذخیره در JSON
+    $decodedFilters = [];
+    foreach ($filters as $key => $value) {
+        if (is_string($value)) {
+            // اگر مقدار رشته است و encoded شده، decode کن
+            $decodedValue = urldecode($value);
+            $decodedFilters[$key] = $decodedValue;
+            error_log("🔤 Decoding: {$value} -> {$decodedValue}");
+        } elseif (is_array($value)) {
+            // اگر مقدار آرایه است (مثل شهرها)، همه المان‌ها را decode کن
+            $decodedFilters[$key] = array_map('urldecode', $value);
+            error_log("🔤 Decoding array: " . json_encode($value) . " -> " . json_encode($decodedFilters[$key]));
         } else {
-            // درج رکورد جدید
-            $insertSql = "INSERT INTO user_filters (user_id, filters, created_at, updated_at) VALUES (?, ?, NOW(), NOW())";
-            $insertStmt = $pdo->prepare($insertSql);
-            $result = $insertStmt->execute([$userId, $filtersJson]);
-            error_log("🔵 درج رکورد جدید: " . ($result ? "موفق" : "ناموفق"));
-            return $result;
+            $decodedFilters[$key] = $value;
         }
     }
+    
+    $filtersJson = json_encode($decodedFilters, JSON_UNESCAPED_UNICODE);
+    error_log("💾 ذخیره فیلترهای DECODED برای کاربر {$userId}: " . $filtersJson);
+    
+    // بررسی وجود رکورد قبلی
+    $checkSql = "SELECT id FROM user_filters WHERE user_id = ?";
+    $checkStmt = $pdo->prepare($checkSql);
+    $checkStmt->execute([$userId]);
+    $existing = $checkStmt->fetch(\PDO::FETCH_OBJ);
+    
+    if ($existing) {
+        // آپدیت رکورد موجود
+        $updateSql = "UPDATE user_filters SET filters = ?, updated_at = NOW() WHERE user_id = ?";
+        $updateStmt = $pdo->prepare($updateSql);
+        $result = $updateStmt->execute([$filtersJson, $userId]);
+        error_log("🔵 آپدیت رکورد موجود: " . ($result ? "موفق" : "ناموفق"));
+        return $result;
+    } else {
+        // درج رکورد جدید
+        $insertSql = "INSERT INTO user_filters (user_id, filters, created_at, updated_at) VALUES (?, ?, NOW(), NOW())";
+        $insertStmt = $pdo->prepare($insertSql);
+        $result = $insertStmt->execute([$userId, $filtersJson]);
+        error_log("🔵 درج رکورد جدید: " . ($result ? "موفق" : "ناموفق"));
+        return $result;
+    }
+}
     
     public static function getDefaultFilters()
     {

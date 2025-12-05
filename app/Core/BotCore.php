@@ -18,6 +18,7 @@ use App\Models\SystemFilter;
 use App\Models\Referral;
 use App\Core\UpdateManager;
 use App\Core\DatabaseManage;
+use APP\Models\Like;
 
 use Exception;
 
@@ -315,11 +316,47 @@ private function forceResetState($user, $chatId)
     $this->showMainMenu($user, $chatId);
 }
 
+private function sendPreStartWelcome($chatId, $userId)
+{
+    $message = "👋 **سلام! خوش اومدی**\n\n";
+    $message .= "به **ربات همسر یابی ** خوش آمدید! 🌸\n\n";
+    $message .= "📋 **قبل از شروع، چند نکته:**\n";
+    $message .= "• پروفایل شما کاملاً محرمانه است\n";
+    $message .= "• می‌توانید محدوده سنی و موقعیت مکانی مشخص کنید\n";
+    $message .= "• ارتباط از طریق چت امن انجام می‌شود\n\n";
+    $message .= "💫 **آماده‌ای شروع کنی؟**";
+    
+    $keyboard = [
+        'inline_keyboard' => [
+            [
+                ['text' => 'بله، شروع کنیم! 🚀', 'callback_data' => 'complete_registration']
+            ],
+            [
+                ['text' => 'راهنما 📖', 'callback_data' => 'help'],
+                ['text' => 'قوانین 📜', 'callback_data' => 'rules']
+            ]
+        ]
+    ];
+    
+    // ذخیره کاربر موقت
+    $tempUser = new User();
+    $tempUser->id = $userId;
+    $tempUser->chat_id = $chatId;
+    $tempUser->status = 'pre_start';
+    $tempUser->save();
+    
+    $this->telegram->sendMessage($chatId, $message, $keyboard);
+}
+
     public function handleMessage($message)
     {
       $text = $message['text'] ?? '';
     $chatId = $message['chat']['id'];
+     $userId = $message['from']['id'];
         $from = $message['from']; // اطلاعات کاربر
+
+          // بررسی آیا کاربر جدید است
+    $user = User::find($userId);
     
 
     $user = \App\Models\User::where('telegram_id', $chatId)->first();
@@ -328,6 +365,12 @@ private function forceResetState($user, $chatId)
     if (!$user) {
         error_log("❌ Failed to find or create user");
         return $this->sendMessage($chatId, "خطا در بارگذاری پروفایل. لطفاً دوباره تلاش کنید.");
+    }
+
+     if (!$user && $text === '/start') {
+        // کاربر کاملاً جدید
+        $this->sendPreStartWelcome($chatId, $userId);
+        return;
     }
 
     
@@ -400,9 +443,14 @@ case '/resetstate':
             case '/start':
                 $this->showMainMenu($user, $chatId);
                 break;
-                 case '/admin':
+                case '/admin':
                 $this->showAdminPanelWithNotification($user, $chatId);
                 break;
+
+                case '**پنل مدیریت**':
+                $this->showAdminPanelWithNotification($user, $chatId);
+                break;
+
             case '📜 تاریخچه درخواست‌ها':
                 $this->showContactHistory($user, $chatId);
                 break;
@@ -562,6 +610,24 @@ case '▶️ فعال سازی حساب':
         echo "🔄 Callback: $data from: {$from['first_name']}\n";
 
         $user = $this->findOrCreateUser($from, $chatId);
+
+// در قسمت پردازش callback_query:
+
+
+if (strpos($data, 'like:') === 0) {
+    $targetUserId = str_replace('like:', '', $data);
+    $this->handleLikeAction($user, $targetUserId, $callbackQuery);
+}
+elseif ($data === 'already_liked') {
+    $this->telegram->answerCallbackQuery($callbackQuery['id'], [
+        'text' => 'شما قبلاً این کاربر را لایک کرده‌اید!',
+        'show_alert' => false
+    ]);
+}
+elseif (strpos($data, 'view_liker:') === 0) {
+    $likerId = str_replace('view_liker:', '', $data);
+    $this->showLikerProfile($user, $chatId, $likerId);
+}
 
         // پردازش کلیه callback data ها
         switch ($data) {
@@ -1267,60 +1333,92 @@ case '▶️ فعال سازی حساب':
 
     // ==================== منوی اصلی ====================
     private function showMainMenu($user, $chatId)
-    {
-          
-        $wallet = $user->getWallet();
-        $cost = $this->getContactRequestCost();
+{
+    $wallet = $user->getWallet();
+    $cost = $this->getContactRequestCost();
 
-        // بررسی دقیق وضعیت پروفایل
-        $actualCompletion = $this->checkProfileCompletion($user);
-        $completionPercent = $this->calculateProfileCompletion($user);
+    // بررسی دقیق وضعیت پروفایل
+    $actualCompletion = $this->checkProfileCompletion($user);
+    $completionPercent = $this->calculateProfileCompletion($user);
 
-        // اگر وضعیت در دیتابیس با واقعیت تطابق ندارد، آپدیت کن
-        if ($user->is_profile_completed != $actualCompletion) {
-            $user->update(['is_profile_completed' => $actualCompletion]);
-        }
-         $statusText = $user->is_active ? '🟢 فعال' : '🔴 غیرفعال';
+    // اگر وضعیت در دیتابیس با واقعیت تطابق ندارد، آپدیت کن
+    if ($user->is_profile_completed != $actualCompletion) {
+        $user->update(['is_profile_completed' => $actualCompletion]);
+    }
+    
+    $statusText = $user->is_active ? '🟢 فعال' : '🔴 غیرفعال';
 
-        $message = "🎯 **منوی اصلی ربات دوستیابی**\n\n";
-        $message .= "👤 کاربر: " . $user->first_name . "\n";
-        $message .= "💰 موجودی: " . number_format($wallet->balance) . " تومان\n";
-        $message .= "📊 وضعیت پروفایل: " . ($actualCompletion ? "✅ تکمیل شده" : "❌ ناقص ({$completionPercent}%)") . "\n\n";
-         $message .= "📱 وضعیت حساب: {$statusText}\n\n"; // 🔴 این خط اضافه شده
+    // 🔴 دریافت آمار لایک‌ها
+   $receivedLikes = \App\Models\Like::getReceivedCount($user->id);
+    $mutualLikes = \App\Models\Like::getMutualCount($user->id);
+    
 
-        // 🔴 اضافه کردن وضعیت پیشنهادات
-        $suggestionCount = \App\Models\UserSuggestion::getUserSuggestionCount($user->id);
-        $message .= "💌 پیشنهادات دریافت شده: " . $suggestionCount . "\n\n";
+    $message = "🎯 **منوی اصلی ربات همسر یابی**\n\n";
+    $message .= "👤 کاربر: " . $user->first_name . "\n";
+    $message .= "💰 موجودی: " . number_format($wallet->balance) . " تومان\n";
+    $message .= "📊 وضعیت پروفایل: " . ($actualCompletion ? "✅ تکمیل شده" : "❌ ناقص ({$completionPercent}%)") . "\n\n";
+    $message .= "📱 وضعیت حساب: {$statusText}\n\n";
+    
+    // 🔴 اضافه کردن آمار لایک‌ها
+    $message .= "❤️ لایک‌های دریافتی: " . $receivedLikes . "\n";
+    $message .= "🤝 لایک‌های متقابل: " . $mutualLikes . "\n\n";
 
-        if (!$actualCompletion) {
-            $message .= "⚠️ **توجه:** برای استفاده از امکانات ربات، لطفاً پروفایل خود را کامل کنید.\n\n";
-        }
+    // 🔴 اضافه کردن وضعیت پیشنهادات
+    $suggestionCount = \App\Models\UserSuggestion::getUserSuggestionCount($user->id);
+    $message .= "💌 پیشنهادات دریافت شده: " . $suggestionCount . "\n\n";
 
-        $message .= "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:";
+    if (!$actualCompletion) {
+        $message .= "⚠️ **توجه:** برای استفاده از امکانات ربات، لطفاً پروفایل خود را کامل کنید.\n\n";
+    }
 
-        // کیبورد معمولی (ReplyKeyboard) برای پایین صفحه
+    $message .= "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:";
+    
+    if ($this->isSuperAdmin($user->telegram_id)) {
         $keyboard = [
             'keyboard' => [
                 [
-                    ['text' => '📜 تاریخچه درخواست‌ها'],
+                    ['text' => '💼 کیف پول'],
                     ['text' => '💌 دریافت پیشنهاد']
                 ],
                 [
-                    ['text' => '⚙️ تنظیمات'],
+                    ['text' => '📊 پروفایل من'],
                     ['text' => '👥 سیستم دعوت']
                 ],
                 [
                     ['text' => 'ℹ️ راهنمای استفاده'],
-                    ['text' => '📊 پروفایل من']
+                    ['text' => '⚙️ تنظیمات']
+                ],
+                [
+                    ['text' => ' **پنل مدیریت**']
                 ]
             ],
             'resize_keyboard' => true,
             'one_time_keyboard' => false
         ];
-
-        $this->telegram->sendMessage($chatId, $message, $keyboard);
+    } else {
+        // کیبورد معمولی (ReplyKeyboard) برای پایین صفحه
+        $keyboard = [
+            'keyboard' => [
+                [
+                    ['text' => '💼 کیف پول'],
+                    ['text' => '💌 دریافت پیشنهاد']
+                ],
+                [
+                    ['text' => '📊 پروفایل من'],
+                    ['text' => '👥 سیستم دعوت']
+                ],
+                [
+                    ['text' => 'ℹ️ راهنمای استفاده'],
+                    ['text' => '⚙️ تنظیمات']
+                ],
+            ],
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
+        ];
     }
 
+    $this->telegram->sendMessage($chatId, $message, $keyboard);
+}
     private function showSettingsMenu($user, $chatId)
     {
         $wallet = $user->getWallet();
@@ -1531,7 +1629,7 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
             $message .= "⚠️ هیچ گزینه‌ای تعریف نشده است.";
         }
     } else {
-        $message .= "لطفاً مقدار جدید را وارد کنید:\n";
+       $message .= "لطفاً " . $field->field_label . "   خود را وارد کنید:\n";
         if ($field->field_type === 'number') {
             $message .= "🔢 (عدد - فارسی یا انگلیسی قابل قبول است)";
         } else {
@@ -2024,6 +2122,7 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
                     ['text' => '📋 تاریخچه تراکنش‌ها']
                 ],
                 [
+                    ['text' => '📜 تاریخچه درخواست‌ها'],
                     ['text' => '🔙 بازگشت به منوی اصلی']
                 ]
             ],
@@ -2192,7 +2291,7 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
     private function handleHelp($chatId)
     {
         $message = "ℹ️ **راهنمای استفاده از ربات**\n\n";
-        $message .= "🤝 **ربات دوستیابی**\n";
+        $message .= "🤝 **ربات همسر یابی**\n";
         $message .= "• ایجاد پروفایل کامل\n";
         $message .= "• جستجوی افراد هم‌شهر\n";
         $message .= "• سیستم کیف پول و شارژ\n";
@@ -2464,8 +2563,12 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
     }
     private function setFilterValue($user, $chatId, $fieldName, $value)
     {
+        
+    // 🔴 DECODE کردن مقدار قبل از استفاده
+    $decodedValue = urldecode($value);
+        
         error_log("🔵 setFilterValue called - Field: {$fieldName}, Value: {$value}, User: {$user->id}");
-
+   
         // دریافت فیلترهای فعلی
         $userFilters = UserFilter::getFilters($user->id);
         error_log("🔵 Current filters before update: " . json_encode($userFilters));
@@ -2483,7 +2586,7 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
 
         $filterLabel = $this->getFilterLabel($fieldName);
         $message = "✅ **فیلتر {$filterLabel} تنظیم شد**\n\n";
-        $message .= "مقدار جدید: **{$value}**\n\n";
+        $message .= "مقدار جدید: **{$decodedValue}**\n\n";
 
         // نمایش وضعیت ذخیره‌سازی
         if (isset($updatedFilters[$fieldName]) && $updatedFilters[$fieldName] === $value) {
@@ -2821,6 +2924,7 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
         foreach ($userFilters as $fieldName => $value) {
             if (!empty($value)) {
                 $filterLabel = $this->getFilterLabel($fieldName);
+                
 
                 if ($fieldName === 'city' && is_array($value)) {
                     // 🔴 نمایش ویژه برای شهرهای چندگانه
@@ -4020,83 +4124,90 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
         return $opposites[$gender] ?? 'زن'; // مقدار پیشفرض
     }
     private function showSuggestion($user, $chatId, $suggestedUser)
-    {
-        $cost = $this->getContactRequestCost();
+{
+    $cost = $this->getContactRequestCost();
 
-        $message = "📋 **مشخصات:**\n\n";
+    $message = "📋 **مشخصات:**\n\n";
 
-        // نمایش فیلدهای عمومی پروفایل
-        $activeFields = ProfileField::getActiveFields();
-        $displayedFieldsCount = 0;
+    // نمایش فیلدهای عمومی پروفایل
+    $activeFields = ProfileField::getActiveFields();
+    $displayedFieldsCount = 0;
 
-        foreach ($activeFields as $field) {
-            if ($this->shouldDisplayField($user, $field)) {
-                $value = $suggestedUser->{$field->field_name} ?? 'تعیین نشده';
+    foreach ($activeFields as $field) {
+        if ($this->shouldDisplayField($user, $field)) {
+            $value = $suggestedUser->{$field->field_name} ?? 'تعیین نشده';
 
-                if ($field->field_name === 'gender') {
-                    $value = $this->convertGenderForDisplay($value);
-                } elseif ($field->field_type === 'select' && is_numeric($value)) {
-                    $value = $this->convertSelectValueToText($field, $value);
-                }
-
-                $message .= "✅ {$field->field_label} : {$value}\n";
-                $displayedFieldsCount++;
+            if ($field->field_name === 'gender') {
+                $value = $this->convertGenderForDisplay($value);
+            } elseif ($field->field_type === 'select' && is_numeric($value)) {
+                $value = $this->convertSelectValueToText($field, $value);
             }
+
+            $message .= "✅ {$field->field_label} : {$value}\n";
+            $displayedFieldsCount++;
         }
+    }
 
-        if ($displayedFieldsCount === 0) {
-            $message .= "👀 اطلاعات بیشتری برای نمایش موجود نیست.\n";
-            $message .= "💼 برای مشاهده اطلاعات کامل، اشتراک تهیه کنید.\n";
-        }
+    if ($displayedFieldsCount === 0) {
+        $message .= "👀 اطلاعات بیشتری برای نمایش موجود نیست.\n";
+        $message .= "💼 برای مشاهده اطلاعات کامل، اشتراک تهیه کنید.\n";
+    }
 
-        $shownCount = \App\Models\UserSuggestion::getShownCount($user->id, $suggestedUser->id);
-        $message .= "\n⭐ این فرد {$shownCount} بار برای شما نمایش داده شده است.";
+    $shownCount = \App\Models\UserSuggestion::getShownCount($user->id, $suggestedUser->id);
+    $message .= "\n⭐ این فرد {$shownCount} بار برای شما نمایش داده شده است.";
+    
+    // 🔴 **اضافه کردن دکمه لایک - با استفاده از متد کلاس Like**
+    $hasLiked = \App\Models\Like::hasLiked($user->id, $suggestedUser->id);
+    
+    $likeButtonText = $hasLiked ? '✅ لایک شده' : '❤️ لایک';
+    $likeCallbackData = $hasLiked ? 'already_liked' : "like:{$suggestedUser->id}";
 
-        // 🔴 دکمه درخواست اطلاعات به صورت اینلاین
-        $inlineKeyboard = [
-            'inline_keyboard' => [
-                [
-                    ['text' => '📞 درخواست اطلاعات تماس', 'callback_data' => "request_contact:{$suggestedUser->id}"]
-                ]
+    // 🔴 دکمه‌های اینلاین (با اضافه شدن دکمه لایک)
+    $inlineKeyboard = [
+        'inline_keyboard' => [
+            [
+                ['text' => '📞 درخواست اطلاعات تماس', 'callback_data' => "request_contact:{$suggestedUser->id}"],
+                ['text' => $likeButtonText, 'callback_data' => $likeCallbackData]
             ]
-        ];
+        ]
+    ];
 
-        // 🔵 دکمه‌های دیگر به صورت ReplyKeyboard معمولی
-        $replyKeyboard = [
-            'keyboard' => [
-                [
-                    ['text' => '💌 پیشنهاد بعدی']
-                ],
-                [
-                    ['text' => '⚙️ تنظیم فیلترها'],
-                    ['text' => '🔙 منوی اصلی']
-                ]
+    // 🔵 دکمه‌های دیگر به صورت ReplyKeyboard معمولی
+    $replyKeyboard = [
+        'keyboard' => [
+            [
+                ['text' => '💌 پیشنهاد بعدی']
             ],
-            'resize_keyboard' => true,
-            'one_time_keyboard' => false
-        ];
+            [
+                ['text' => '⚙️ تنظیم فیلترها'],
+                ['text' => '🔙 منوی اصلی']
+            ]
+        ],
+        'resize_keyboard' => true,
+        'one_time_keyboard' => false
+    ];
 
-        if ($suggestedUser->telegram_photo_id) {
-            try {
-                // 🔴 ارسال عکس و اطلاعات در یک پیام با caption
-                $this->telegram->sendPhoto($chatId, $suggestedUser->telegram_photo_id, $message, $inlineKeyboard);
-            } catch (\Exception $e) {
-                error_log("❌ Error showing suggestion with photo: " . $e->getMessage());
-                // اگر ارسال عکس با caption شکست خورد، فقط متن را نمایش بده
-                $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
-            }
-        } else {
-            // اگر کاربر عکس ندارد، فقط متن را نمایش بده
+    if ($suggestedUser->telegram_photo_id) {
+        try {
+            // 🔴 ارسال عکس و اطلاعات در یک پیام با caption
+            $this->telegram->sendPhoto($chatId, $suggestedUser->telegram_photo_id, $message, $inlineKeyboard);
+        } catch (\Exception $e) {
+            error_log("❌ Error showing suggestion with photo: " . $e->getMessage());
+            // اگر ارسال عکس با caption شکست خورد، فقط متن را نمایش بده
             $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
         }
-
-        // ارسال کیبورد معمولی
-        $this->telegram->sendMessage($chatId, "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:", $replyKeyboard);
-
-        $newState = 'viewing_suggestion:' . $suggestedUser->id;
-        $user->update(['state' => $newState]);
-        error_log("💾 STATE UPDATED: {$newState}");
+    } else {
+        // اگر کاربر عکس ندارد، فقط متن را نمایش بده
+        $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
     }
+
+    // ارسال کیبورد معمولی
+    $this->telegram->sendMessage($chatId, "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:", $replyKeyboard);
+
+    $newState = 'viewing_suggestion:' . $suggestedUser->id;
+    $user->update(['state' => $newState]);
+    error_log("💾 STATE UPDATED: {$newState}");
+}
     // 🔴 متد جدید برای چک کردن نمایش فیلد
     private function shouldDisplayField($user, $field)
     {
@@ -6262,7 +6373,7 @@ private function cleanupExpiredSessions()
         $inviteLink = $user->getInviteLink();
 
         $shareText = "👋 دوست عزیز!\n\n";
-        $shareText .= "من از این ربات دوستیابی عالی استفاده می‌کنم و پیشنهاد می‌کنم تو هم عضو بشی! 🤝\n\n";
+        $shareText .= "من از این ربات همسر یابی عالی استفاده می‌کنم و پیشنهاد می‌کنم تو هم عضو بشی! 🤝\n\n";
         $shareText .= "از طریق لینک زیر می‌تونی ثبت نام کنی:\n";
         $shareText .= $inviteLink . "\n\n";
         $shareText .= "پس از عضویت، می‌تونی با تکمیل پروفایل، افراد جدید رو ببینی و ارتباط برقرار کنی! 💫";
@@ -6987,5 +7098,155 @@ private function getUserStatusInfo($user)
         return "🔴 حساب شما غیرفعال است\n📅 از تاریخ: $date\n📝 دلیل: $reason";
     }
 }
+
+private function handleLikeAction($user, $likedUserId, $callbackQuery)
+{
+    $callbackQueryId = $callbackQuery['id'] ?? null;
+    
+    if (!$callbackQueryId) {
+        error_log("❌ callback_query_id not found in callbackQuery array");
+        return;
+    }
+    
+    // 🔴 نکته مهم: $likedUserId که از callback_data دریافت می‌شود، باید id کاربر باشد (نه telegram_id)
+    // در showSuggestion داریم: "like:{$suggestedUser->id}" که id است
+    
+    // پیدا کردن کاربر لایک‌شونده با استفاده از id
+    $likedUser = \App\Models\User::find($likedUserId);
+    if (!$likedUser) {
+        $this->telegram->answerCallbackQuery($callbackQueryId, [
+            'text' => "کاربر مورد نظر یافت نشد!",
+            'show_alert' => false
+        ]);
+        return;
+    }
+    
+    // 🔴 استفاده از id کاربران (نه telegram_id)
+    $likerId = $user->id;  // id کاربر لایک‌کننده
+    $likedId = $likedUser->id;  // id کاربر لایک‌شونده
+    
+    // بررسی آیا قبلاً لایک کرده
+    if (\App\Models\Like::hasLiked($likerId, $likedId)) {
+        $this->telegram->answerCallbackQuery($callbackQueryId, [
+            'text' => "شما قبلاً این کاربر را لایک کرده‌اید!",
+            'show_alert' => false
+        ]);
+        return;
+    }
+
+    // ذخیره لایک با استفاده از id کاربران
+    $like = \App\Models\Like::create([
+        'liker_id' => $likerId,  // id کاربر لایک‌کننده
+        'liked_id' => $likedId,  // id کاربر لایک‌شونده
+        'viewed' => 0,
+        'mutual' => 0
+    ]);
+
+    // بررسی لایک متقابل
+    $isMutual = \App\Models\Like::checkAndMarkMutual($likerId, $likedId);
+
+    if ($isMutual) {
+        $responseText = "🎉 لایک متقابل! این کاربر هم شما را لایک کرده بود!";
+        $showAlert = true;
+        
+        $this->notifyMutualLike($likerId, $likedId);
+    } else {
+        $responseText = "❤️ لایک شما ثبت شد!";
+        $showAlert = false;
+        
+        $this->sendLikeNotification($likerId, $likedId);
+    }
+
+    // پاسخ به callback
+    $this->telegram->answerCallbackQuery($callbackQueryId, [
+        'text' => $responseText,
+        'show_alert' => $showAlert
+    ]);
+}
+
+private function sendLikeNotification($likerId, $likedUserId)
+{
+    $liker = \App\Models\User::find($likerId);
+    $likedUser = \App\Models\User::find($likedUserId);
+    
+    if (!$liker || !$likedUser) {
+        return;
+    }
+    
+    $message = "🎉 **شما یک لایک جدید دارید!**\n\n";
+    $message .= "👤 کاربر جدیدی شما را پسندید:\n\n";
+    $message .= "📛 نام: {$liker->first_name}\n";
+    
+    if ($liker->age) {
+        $message .= "📅 سن: {$liker->age}\n";
+    }
+    
+    if ($liker->city) {
+        $message .= "🏙️ شهر: {$liker->city}\n";
+    }
+    
+    $message .= "\nبرای مشاهده کامل پروفایل، روی دکمه زیر کلیک کنید:";
+    
+    // 🔴 استفاده از view_liker: برای هماهنگی با handler موجود
+    $inlineKeyboard = [
+        'inline_keyboard' => [
+            [
+                ['text' => '👀 مشاهده پروفایل', 'callback_data' => "view_liker:{$likerId}"]
+            ]
+        ]
+    ];
+    
+    try {
+        $this->telegram->sendMessage($likedUser->telegram_id, $message, $inlineKeyboard);
+        
+        // علامت زدن لایک به عنوان ارسال شده
+        \App\Models\Like::markAsViewed($likerId, $likedUserId);
+        
+    } catch (\Exception $e) {
+        error_log("❌ ارسال نوتیفیکیشن لایک: " . $e->getMessage());
+    }
+}
+
+private function notifyMutualLike($userAId, $userBId)
+{
+    $userA = \App\Models\User::find($userAId);
+    $userB = \App\Models\User::find($userBId);
+    
+    if (!$userA || !$userB) {
+        return;
+    }
+    
+    $message = "🎉 **لایک متقابل!**\n\n";
+    $message .= "🤝 شما و کاربر دیگری همدیگر را لایک کردید!\n\n";
+    $message .= "✅ اکنون می‌توانید از طریق ربات با هم در ارتباط باشید.";
+    
+    // ارسال به هر دو کاربر
+    $this->telegram->sendMessage($userA->telegram_id, $message);
+    $this->telegram->sendMessage($userB->telegram_id, $message);
+}
+
+// 🔹 نمایش لیست لایک‌کنندگان
+private function showLikerProfile($user, $chatId, $likerId)
+{
+    // پیدا کردن کاربر لایک‌کننده
+    $liker = \App\Models\User::find($likerId);
+    
+    if (!$liker) {
+        $this->telegram->sendMessage($chatId, "❌ کاربر مورد نظر یافت نشد.");
+        return;
+    }
+    
+    // نمایش پیام تأیید
+    $this->telegram->sendMessage($chatId, "🔍 در حال بارگذاری پروفایل کاربر...");
+    
+    // استفاده از متد showSuggestion موجود برای نمایش پروفایل
+    // این متد هم دکمه لایک و هم دکمه درخواست اطلاعات تماس را نمایش می‌دهد
+    $this->showSuggestion($user, $chatId, $liker);
+    
+    // آپدیت وضعیت کاربر
+    $user->update(['state' => 'viewing_liker:' . $likerId]);
+}
+
+
 
 }

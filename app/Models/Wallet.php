@@ -37,7 +37,7 @@ class Wallet extends Model
         return $this;
     }
 
-    public function deduct($amount, $description = "", $type = 'purchase')
+   public function deduct($amount, $description = "", $type = 'purchase')
 {
     $pdo = null;
     $maxRetries = 2;
@@ -54,7 +54,7 @@ class Wallet extends Model
             // شروع تراکنش
             $pdo->beginTransaction();
             
-            // کسر از کیف پول
+            // ✅ کسر از کیف پول - فقط همین یک بار
             $sql = "UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND balance >= ?";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([$amount, $this->user_id, $amount]);
@@ -64,7 +64,7 @@ class Wallet extends Model
                 return false; // موجودی کافی نیست
             }
             
-            // ثبت تراکنش با نوع مشخص
+            // ✅ ثبت تراکنش با نوع مشخص
             $transactionSql = "INSERT INTO transactions (user_id, amount, type, description, created_at) 
                               VALUES (?, ?, ?, ?, NOW())";
             $transactionStmt = $pdo->prepare($transactionSql);
@@ -72,10 +72,8 @@ class Wallet extends Model
             
             $pdo->commit();
             
-            // آپدیت موجودی در شیء فعلی
-            $this->refresh(); // 🔴 رفرش کردن مدل از دیتابیس
-            $this->balance -= $amount;
-            $this->save();
+            // ✅ فقط رفرش کن تا مدل با دیتابیس همگام شود (بدون کسر مجدد)
+            $this->refresh();
             
             return true;
             
@@ -92,7 +90,7 @@ class Wallet extends Model
             if (strpos($e->getMessage(), 'MySQL server has gone away') !== false && $retryCount < $maxRetries) {
                 $retryCount++;
                 error_log("🔄 تلاش مجدد برای اتصال به دیتابیس ({$retryCount}/{$maxRetries})");
-                sleep(1); // کمی صبر کن
+                sleep(1);
                 continue;
             }
             

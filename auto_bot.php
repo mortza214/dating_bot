@@ -5,6 +5,7 @@ use Dotenv\Dotenv;
 use Illuminate\Database\Capsule\Manager as Capsule;
 use App\Core\BotCore;
 
+
 // بررسی وجود فایل .env و بارگذاری آن
 $envFile = __DIR__ . '/.env';
 if (file_exists($envFile)) {

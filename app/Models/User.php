@@ -20,7 +20,6 @@ class User extends Model
         'weight',
         'education',
         'job',
-        'fother_job',
         'income_level',
         'city',
         'age',
@@ -223,6 +222,15 @@ public function getStatusInfo()
         $date = $this->deactivated_at ? date('Y-m-d H:i', strtotime($this->deactivated_at)) : 'نامشخص';
         return "🔴 حساب شما غیرفعال است\n📅 از تاریخ: $date\n📝 دلیل: $reason";
     }
+}
+public function likesGiven()
+{
+    return $this->hasMany(Like::class, 'liker_id');
+}
+
+public function likesReceived()
+{
+    return $this->hasMany(Like::class, 'liked_id');
 }
 
 }
