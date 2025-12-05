@@ -21,6 +21,7 @@ use App\Models\Referral;
 use App\Core\UpdateManager;
 use App\Core\DatabaseManage;
 use APP\Models\Like;
+use APP\Models\UserSubscription;
 
 use Exception;
 
@@ -852,9 +853,9 @@ elseif (strpos($data, 'view_liker:') === 0) {
                 break;
 
             // بخش  پیشنهاد ات 
-            case 'get_suggestion':
-                $this->handleGetSuggestion($user, $chatId);
-                break;
+            // case 'get_suggestion':
+            //     $this->handleGetSuggestion($user, $chatId);
+            //     break;
            
             case 'debug_field_options':
                 $this->debugFieldOptions($user, $chatId);
@@ -2185,45 +2186,137 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
         $this->telegram->sendMessage($chatId, $message, $keyboard);
     }
 
-
-
-    private function handleTransactions($user, $chatId)
-    {
-        $transactions = $user->transactions()->latest()->limit(10)->get();
-        $wallet = $user->getWallet();
-
-        $message = "📋 **آخرین تراکنش‌های شما**\n\n";
-
-        if ($transactions->count() > 0) {
-            foreach ($transactions as $transaction) {
-                $typeEmoji = $transaction->amount > 0 ? '➕' : '➖';
-
-                // تبدیل رشته به تاریخ
-                $timestamp = strtotime($transaction->created_at);
-                $formattedDate = date('Y-m-d H:i', $timestamp);
-
-                $message .= "{$typeEmoji} **" . number_format(abs($transaction->amount)) . " تومان**\n";
-                $message .= "📝 " . $this->getTransactionTypeText($transaction->type) . "\n";
-                $message .= "⏰ " . $formattedDate . "\n";
-                $message .= "────────────\n";
-            }
-
-            $message .= "💰 موجودی فعلی: **" . number_format($wallet->balance) . " تومان**\n\n";
+private function toPersianDateTime($date, $showTime = true)
+{
+    if (!$date) {
+        return 'نامشخص';
+    }
+    
+    try {
+        $jdate = \Morilog\Jalali\Jalalian::fromDateTime($date);
+        
+        if ($showTime) {
+            return $jdate->format('Y/m/d H:i');
         } else {
-            $message .= "📭 هیچ تراکنشی یافت نشد.";
+            return $jdate->format('Y/m/d');
         }
+    } catch (\Exception $e) {
+        error_log("Persian date conversion error: " . $e->getMessage());
+        
+        // در صورت خطا، تاریخ میلادی برگردان
+        if ($date instanceof \Carbon\Carbon) {
+            return $date->format('Y/m/d H:i');
+        }
+        return date('Y/m/d H:i', strtotime($date));
+    }
+}
 
-        $keyboard = [
-            'inline_keyboard' => [
-                [
-                    ['text' => '🔙 بازگشت به کیف پول', 'callback_data' => 'back_to_wallet']
-                ]
-            ]
-        ];
+   private function handleTransactions($user, $chatId)
+{
+    $transactions = $user->transactions()->latest()->limit(15)->get();
+    $wallet = $user->getWallet();
 
-        $this->telegram->sendMessage($chatId, $message, $keyboard);
+    $message = "📋 **آخرین تراکنش‌های شما**\n\n";
+    
+    // آمار سریع
+    $totalDeposit = $transactions->where('amount', '>', 0)->sum('amount');
+    $totalWithdraw = abs($transactions->where('amount', '<', 0)->sum('amount'));
+    
+    $message .= "💰 **آمار سریع:**\n";
+    $message .= "• کل واریز‌ها: " . number_format($totalDeposit) . " تومان\n";
+    $message .= "• کل برداشت‌ها: " . number_format($totalWithdraw) . " تومان\n";
+    $message .= "• موجودی فعلی: **" . number_format($wallet->balance) . " تومان**\n\n";
+    
+    $message .= "📊 **جزئیات تراکنش‌ها:**\n";
+    $message .= "────────────────\n";
+
+    if ($transactions->count() > 0) {
+        $counter = 1;
+        foreach ($transactions as $transaction) {
+            // انتخاب ایموجی مناسب
+            $typeEmoji = $this->getTransactionEmoji($transaction->type);
+            
+            // تعیین نوع تراکنش (واریز/برداشت)
+            $isDeposit = $transaction->amount > 0;
+            $sign = $isDeposit ? '➕' : '➖';
+            $amountColor = $isDeposit ? '🟢' : '🔴';
+            
+            // تاریخ شمسی
+            $formattedDate = $this->toPersianDateTime($transaction->created_at);
+            
+            // متن تراکنش
+            $message .= "{$counter}. {$typeEmoji} **" . $this->getTransactionTypeText($transaction->type) . "**\n";
+            $message .= "   {$amountColor} مبلغ: **" . number_format(abs($transaction->amount)) . " تومان**\n";
+            
+            // توضیحات اگر وجود دارد
+            if (!empty($transaction->description)) {
+                $message .= "   📌 " . $transaction->description . "\n";
+            }
+            
+            $message .= "   ⏰ تاریخ: " . $formattedDate . "\n";
+            
+            // وضعیت تراکنش (اگر فیلد status وجود دارد)
+            if (isset($transaction->status)) {
+                $statusText = $this->getTransactionStatusText($transaction->status);
+                $message .= "   📊 وضعیت: " . $statusText . "\n";
+            }
+            
+            $message .= "   ────────────────\n";
+            $counter++;
+        }
+        
+        // پیام پایانی اگر تراکنش بیشتری وجود دارد
+        $totalTransactions = $user->transactions()->count();
+        if ($totalTransactions > 15) {
+            $message .= "\n📌 *نکته:* " . ($totalTransactions - 15) . " تراکنش قدیمی‌تر وجود دارد.\n";
+            $message .= "برای مشاهده تمام تراکنش‌ها از بخش گزارشات استفاده کنید.";
+        }
+    } else {
+        $message .= "📭 هیچ تراکنشی یافت نشد.\n";
+        $message .= "اولین تراکنش شما می‌تواند شارژ کیف پول یا خرید اشتراک باشد.";
     }
 
+    $keyboard = [
+        'inline_keyboard' => [
+            [
+                ['text' => '📥 شارژ کیف پول', 'callback_data' => 'charge_wallet'],
+                ['text' => '💎 خرید اشتراک', 'callback_data' => 'buy_subscription']
+            ],
+            [
+                ['text' => '🔄 بروزرسانی', 'callback_data' => 'refresh_transactions'],
+                ['text' => '🔙 بازگشت', 'callback_data' => 'back_to_wallet']
+            ]
+        ]
+    ];
+
+    $this->telegram->sendMessage($chatId, $message, $keyboard);
+}
+
+// متد کمکی برای وضعیت تراکنش‌ها (اختیاری)
+private function getTransactionStatusText($status)
+{
+    $statuses = [
+        'pending' => '⏳ در انتظار',
+        'completed' => '✅ تکمیل شده',
+        'failed' => '❌ ناموفق',
+        'cancelled' => '🚫 لغو شده'
+    ];
+    
+    return $statuses[$status] ?? $status;
+}
+// ✅ اضافه کردن این متد برای ایموجی تراکنش‌ها
+private function getTransactionEmoji($type)
+{
+    $emojis = [
+        'charge' => '💵',
+        'purchase' => '📞',
+        'referral_bonus' => '🎁',
+        'withdraw' => '🏦',
+        'subscription_purchase' => '💎' // برای خرید اشتراک
+    ];
+    
+    return $emojis[$type] ?? '💰';
+}
     private function handleChargeCodeInput($text, $user, $chatId)
     {
         $code = strtoupper(trim($text));
@@ -2361,17 +2454,18 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
         $this->telegram->sendMessage($chatId, $message, $keyboard);
     }
 
-    private function getTransactionTypeText($type)
-    {
-        $types = [
-            'charge' => 'شارژ کیف پول',
-            'purchase' => 'دریافت اطلاعات  تماس ',
-            'referral_bonus' => '🎁پاداش دعوت',
-            'withdraw' => 'برداشت'
-        ];
+   private function getTransactionTypeText($type)
+{
+    $types = [
+        'charge' => 'شارژ کیف پول',
+        'purchase' => 'دریافت اطلاعات تماس',
+        'referral_bonus' => '🎁 پاداش دعوت',
+        'withdraw' => 'برداشت',
+        'subscription_purchase' => 'خرید اشتراک' // ✅ جدید
+    ];
 
-        return $types[$type] ?? $type;
-    }
+    return $types[$type] ?? $type;
+}
     private function getCities()
     {
         try {
@@ -3943,7 +4037,7 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
             $pdo = $this->getPDO();
 
             if (empty($excludedUsers)) {
-                $excludedUsers = [0];
+                $excludedUsers = [2];
             }
 
             $excludedStr = implode(',', $excludedUsers);
@@ -4319,7 +4413,7 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
     {
         // اینجا منطق چک کردن اشتراک کاربر رو پیاده‌سازی کنید
         // فعلاً از مدل Subscription استفاده می‌کنیم
-        return \App\Models\Subscription::hasActiveSubscription($user->id);
+        return \App\Models\UserSubscription::hasActiveSubscription($user->id);
     }
 
     private function getFieldOptions($field)
@@ -5030,122 +5124,153 @@ private function getContactInfo($user)
     }
 
     private function showContactHistory($user, $chatId, $page = 1)
-    {
-        $pdo = $this->getPDO();
+{
+    $pdo = $this->getPDO();
 
-        // محاسبه صفحه‌بندی
-        $perPage = 6; // تغییر به 6 تا در هر صفحه 3 ردیف دو تایی داشته باشیم
-        $offset = ($page - 1) * $perPage;
+    // محاسبه صفحه‌بندی
+    $perPage = 6; // تغییر به 6 تا در هر صفحه 3 ردیف دو تایی داشته باشیم
+    $offset = ($page - 1) * $perPage;
 
-        // تعداد کل رکوردها
-        $countSql = "SELECT COUNT(*) as total FROM contact_request_history WHERE user_id = ?";
-        $countStmt = $pdo->prepare($countSql);
-        $countStmt->execute([$user->id]);
-        $totalCount = $countStmt->fetch(\PDO::FETCH_OBJ)->total;
-        $totalPages = ceil($totalCount / $perPage);
+    // تعداد کل رکوردها
+    $countSql = "SELECT COUNT(*) as total FROM contact_request_history WHERE user_id = ?";
+    $countStmt = $pdo->prepare($countSql);
+    $countStmt->execute([$user->id]);
+    $totalCount = $countStmt->fetch(\PDO::FETCH_OBJ)->total;
+    $totalPages = ceil($totalCount / $perPage);
 
-        // دریافت رکوردهای صفحه جاری
-        $sql = "SELECT crh.*, u.first_name, u.username, u.telegram_id 
-    FROM contact_request_history crh 
-    JOIN users u ON crh.requested_user_id = u.id 
-    WHERE crh.user_id = ? 
-    ORDER BY crh.requested_at DESC 
-    LIMIT ? OFFSET ?";
+    // دریافت رکوردهای صفحه جاری
+    $sql = "SELECT crh.*, u.first_name, u.username, u.telegram_id 
+        FROM contact_request_history crh 
+        JOIN users u ON crh.requested_user_id = u.id 
+        WHERE crh.user_id = ? 
+        ORDER BY crh.requested_at DESC 
+        LIMIT ? OFFSET ?";
 
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(1, $user->id, \PDO::PARAM_INT);
-        $stmt->bindValue(2, $perPage, \PDO::PARAM_INT);
-        $stmt->bindValue(3, $offset, \PDO::PARAM_INT);
-        $stmt->execute();
+    $stmt = $pdo->prepare($sql);
+    $stmt->bindValue(1, $user->id, \PDO::PARAM_INT);
+    $stmt->bindValue(2, $perPage, \PDO::PARAM_INT);
+    $stmt->bindValue(3, $offset, \PDO::PARAM_INT);
+    $stmt->execute();
 
-        $history = $stmt->fetchAll(\PDO::FETCH_OBJ);
+    $history = $stmt->fetchAll(\PDO::FETCH_OBJ);
 
-        if (empty($history)) {
-            $message = "📜 **تاریخچه درخواست‌های تماس**\n\n";
-            $message .= "📭 شما تاکنون هیچ درخواست تماسی نداشته‌اید.\n\n";
-            $message .= "💡 پس از درخواست اطلاعات تماس برای هر کاربر، اطلاعات آنها در اینجا ذخیره می‌شود و می‌توانید بدون پرداخت مجدد آنها را مشاهده کنید.";
+    if (empty($history)) {
+        $message = "📜 **تاریخچه درخواست‌های تماس**\n\n";
+        $message .= "📭 شما تاکنون هیچ درخواست تماسی نداشته‌اید.\n\n";
+        $message .= "💡 پس از درخواست اطلاعات تماس برای هر کاربر، اطلاعات آنها در اینجا ذخیره می‌شود و می‌توانید بدون پرداخت مجدد آنها را مشاهده کنید.";
 
-            // کیبورد ثابت برای حالت خالی
-            $replyKeyboard = [
-                'keyboard' => [
-                    [
-                        ['text' => '💌 دریافت پیشنهاد'],
-                        ['text' => '🔙 منوی اصلی']
-                    ]
-                ],
-                'resize_keyboard' => true,
-                'one_time_keyboard' => false
-            ];
-
-            $this->telegram->sendMessage($chatId, $message, $replyKeyboard);
-            return;
-        }
-
-        $message = "📜 **تاریخچه درخواست‌های تماس شما**\n\n";
-        $message .= "👥 تعداد کل: " . $totalCount . " نفر\n";
-        $message .= "📄 صفحه: " . $page . " از " . $totalPages . "\n\n";
-
-        foreach ($history as $index => $record) {
-            $globalIndex = $offset + $index + 1;
-            $requestDate = date('Y-m-d', strtotime($record->requested_at));
-
-            $message .= "**" . $globalIndex . ". {$record->first_name}**\n";
-            $message .= "📅 {$requestDate} | 💰 " . number_format($record->amount_paid) . " تومان\n";
-            $message .= "────────────\n";
-        }
-
-        // ایجاد کیبورد ثابت با دو دکمه در هر ردیف
-        $keyboardRows = [];
-        $tempRow = [];
-
-
-       foreach ($history as $record) {
-    $buttonText = "👤 {$record->first_name}";
-    $tempRow[] = ['text' => $buttonText];
-    
-    // ذخیره با نوع 'contact'
-    $this->saveButtonInfo($user->id, $buttonText, $record->requested_user_id, null, 'contact');
-    
-    if (count($tempRow) === 2) {
-        $keyboardRows[] = $tempRow;
-        $tempRow = [];
-    }
-}
-
-        // اگر دکمه‌های باقیمانده وجود داشت، آنها را اضافه کن
-        if (!empty($tempRow)) {
-            $keyboardRows[] = $tempRow;
-        }
-
-        // اضافه کردن دکمه‌های ناوبری
-        $navButtons = [];
-        if ($page > 1) {
-            $navButtons[] = ['text' => '⏪ صفحه قبلی'];
-        }
-        if ($page < $totalPages) {
-            $navButtons[] = ['text' => 'صفحه بعدی ⏩'];
-        }
-
-        if (!empty($navButtons)) {
-            $keyboardRows[] = $navButtons;
-        }
-
-        // دکمه‌های اصلی
-        $keyboardRows[] = [
-            ['text' => '💌 پیشنهاد جدید'],
-            ['text' => '🔙 منوی اصلی']
-        ];
-
-        // کیبورد معمولی ثابت
+        // کیبورد ثابت برای حالت خالی
         $replyKeyboard = [
-            'keyboard' => $keyboardRows,
+            'keyboard' => [
+                [
+                    ['text' => '💌 دریافت پیشنهاد'],
+                    ['text' => '🔙 منوی اصلی']
+                ]
+            ],
             'resize_keyboard' => true,
             'one_time_keyboard' => false
         ];
 
-        // ارسال پیام با کیبورد ثابت
         $this->telegram->sendMessage($chatId, $message, $replyKeyboard);
+        return;
     }
+
+    $message = "📜 **تاریخچه درخواست‌های تماس شما**\n\n";
+    $message .= "👥 تعداد کل: " . $totalCount . " نفر\n";
+    $message .= "📄 صفحه: " . $page . " از " . $totalPages . "\n\n";
+
+    foreach ($history as $index => $record) {
+        $globalIndex = $offset + $index + 1;
+        
+        // تبدیل تاریخ به شمسی
+        $requestDate = $this->toPersianDate($record->requested_at, 'Y/m/d');
+
+        $message .= "**" . $globalIndex . ". {$record->first_name}**\n";
+        $message .= "📅 {$requestDate} | 💰 " . number_format($record->amount_paid) . " تومان\n";
+        $message .= "────────────\n";
+    }
+
+    // ایجاد کیبورد ثابت با دو دکمه در هر ردیف
+    $keyboardRows = [];
+    $tempRow = [];
+
+    foreach ($history as $record) {
+        $buttonText = "👤 {$record->first_name}";
+        $tempRow[] = ['text' => $buttonText];
+        
+        // ذخیره با نوع 'contact'
+        $this->saveButtonInfo($user->id, $buttonText, $record->requested_user_id, null, 'contact');
+        
+        if (count($tempRow) === 2) {
+            $keyboardRows[] = $tempRow;
+            $tempRow = [];
+        }
+    }
+
+    // اگر دکمه‌های باقیمانده وجود داشت، آنها را اضافه کن
+    if (!empty($tempRow)) {
+        $keyboardRows[] = $tempRow;
+    }
+
+    // اضافه کردن دکمه‌های ناوبری
+    $navButtons = [];
+    if ($page > 1) {
+        $navButtons[] = ['text' => '⏪ صفحه قبلی'];
+    }
+    if ($page < $totalPages) {
+        $navButtons[] = ['text' => 'صفحه بعدی ⏩'];
+    }
+
+    if (!empty($navButtons)) {
+        $keyboardRows[] = $navButtons;
+    }
+
+    // دکمه‌های اصلی
+    $keyboardRows[] = [
+        ['text' => '💌 پیشنهاد جدید'],
+        ['text' => '🔙 منوی اصلی']
+    ];
+
+    // کیبورد معمولی ثابت
+    $replyKeyboard = [
+        'keyboard' => $keyboardRows,
+        'resize_keyboard' => true,
+        'one_time_keyboard' => false
+    ];
+
+    // ارسال پیام با کیبورد ثابت
+    $this->telegram->sendMessage($chatId, $message, $replyKeyboard);
+}
+
+// اگر تابع toPersianDate را ندارید، این را اضافه کنید:
+private function toPersianDate($date, $format = 'Y/m/d')
+{
+    if (!$date) {
+        return 'نامشخص';
+    }
+    
+    try {
+        $jdate = \Morilog\Jalali\Jalalian::fromDateTime($date);
+        return $jdate->format($format);
+    } catch (\Exception $e) {
+        error_log("Persian date conversion error: " . $e->getMessage());
+        
+        // در صورت خطا، تاریخ میلادی برگردان
+        if ($date instanceof \Carbon\Carbon) {
+            return $date->format($format);
+        }
+        
+        // اگر format شمسی را داریم، به میلادی تغییر دهیم
+        $format = str_replace(
+            ['Y', 'm', 'd', 'H', 'i', 's'],
+            ['Y', 'm', 'd', 'H', 'i', 's'],
+            $format
+        );
+        
+        return date($format, strtotime($date));
+    }
+}
+
 
 /**
  * ذخیره اطلاعات دکمه در جدول user_button_sessions
@@ -7619,30 +7744,40 @@ private function handleSubscriptionConfirmation($user, $chatId, $buttonText)
             ->update(['status' => 'expired']);
         
         // ایجاد اشتراک جدید
-           $expiryDate = \Carbon\Carbon::now()->addDays($plan->duration_days);
+        $expiryDate = \Carbon\Carbon::now()->addDays($plan->duration_days);
     
-    $subscription = \App\Models\UserSubscription::create([
-        'user_id' => $user->id,
-        'plan_id' => $plan->id,
-        'start_date' => \Carbon\Carbon::now(),
-        'expiry_date' => $expiryDate,
-        'status' => 'active',
-        'remaining_daily_contacts' => $plan->max_daily_contacts,
-        'remaining_total_contacts' => $plan->total_contacts,
-        'remaining_daily_suggestions' => $plan->max_daily_suggestions,
-        'remaining_total_suggestions' => $plan->total_suggestions,
-        'last_reset_date' => \Carbon\Carbon::now()
-    ]);
+        $subscription = \App\Models\UserSubscription::create([
+            'user_id' => $user->id,
+            'plan_id' => $plan->id,
+            'start_date' => \Carbon\Carbon::now(),
+            'expiry_date' => $expiryDate,
+            'status' => 'active',
+            'remaining_daily_contacts' => $plan->max_daily_contacts,
+            'remaining_total_contacts' => $plan->total_contacts,
+            'remaining_daily_suggestions' => $plan->max_daily_suggestions,
+            'remaining_total_suggestions' => $plan->total_suggestions,
+            'last_reset_date' => \Carbon\Carbon::now()
+        ]);
+        
+        // ✅ **ثبت تراکنش خرید اشتراک**
+        \App\Models\Transaction::create([
+            'user_id' => $user->id,
+            'type' => 'subscription_purchase', // نوع جدید
+            'amount' => -$plan->price, // منفی چون کسر می‌شود
+            'description' => "خرید اشتراک {$plan->name} ({$plan->duration_days} روزه)",
+            'status' => 'completed',
+            'related_id' => $subscription->id // ذخیره آیدی اشتراک
+        ]);
     
-    // نمایش تاریخ شمسی
-    $jdate = \Morilog\Jalali\Jalalian::fromDateTime($expiryDate);
+        // نمایش تاریخ شمسی
+        $jdate = \Morilog\Jalali\Jalalian::fromDateTime($expiryDate);
     
-    $message = "🎉 **خرید اشتراک با موفقیت انجام شد!**\n\n";
-    $message .= "💎 اشتراک: {$plan->name}\n";
-    $message .= "💰 مبلغ کسر شده: " . number_format($plan->price) . " تومان\n";
-    $message .= "📊 موجودی جدید کیف پول: " . number_format($wallet->balance) . " تومان\n";
-    $message .= "⏳ اعتبار تا: " . $jdate->format('Y/m/d') . "\n\n";
-    $message .= "✅ اشتراک شما فعال شد و می‌توانید از امکانات ویژه استفاده کنید.";
+        $message = "🎉 **خرید اشتراک با موفقیت انجام شد!**\n\n";
+        $message .= "💎 اشتراک: {$plan->name}\n";
+        $message .= "💰 مبلغ کسر شده: " . number_format($plan->price) . " تومان\n";
+        $message .= "📊 موجودی جدید کیف پول: " . number_format($wallet->balance) . " تومان\n";
+        $message .= "⏳ اعتبار تا: " . $jdate->format('Y/m/d') . "\n\n";
+        $message .= "✅ اشتراک شما فعال شد و می‌توانید از امکانات ویژه استفاده کنید.";
         
     } elseif ($buttonText === '❌ خیر، انصراف') {
         $message = "خرید اشتراک لغو شد.";
@@ -7680,10 +7815,28 @@ private function handleSubscriptionConfirmation($user, $chatId, $buttonText)
         $plan = $subscription->plan;
         $stats = $subscription->getUsageStats();
         
+        // تبدیل تاریخ به شمسی با Morilog/Jalali
+        $expiryDateFormatted = 'نامشخص';
+        if ($subscription->expiry_date) {
+            try {
+                // استفاده از Jalalian
+                $jdate = Jalalian::fromDateTime($subscription->expiry_date);
+                $expiryDateFormatted = $jdate->format('Y/m/d');
+            } catch (\Exception $e) {
+                // در صورت خطا، تاریخ میلادی نمایش داده شود
+                error_log("Jalalian conversion error: " . $e->getMessage());
+                if ($subscription->expiry_date instanceof \Carbon\Carbon) {
+                    $expiryDateFormatted = $subscription->expiry_date->format('Y/m/d');
+                } else {
+                    $expiryDateFormatted = date('Y/m/d', strtotime($subscription->expiry_date));
+                }
+            }
+        }
+        
         $message = "📋 **وضعیت اشتراک شما:**\n\n";
-        $message .= "✅ اشتراک فعال: **{$plan->name}**\n";
+        $message .= "✅ اشتراک فعال: **" . ($plan->name ?? 'نامشخص') . "**\n";
         $message .= "⏳ روزهای باقی‌مانده: " . $subscription->daysRemaining() . " روز\n";
-        $message .= "📅 اعتبار تا: " . jdate('Y/m/d', strtotime($subscription->expiry_date)) . "\n\n";
+        $message .= "📅 اعتبار تا: " . $expiryDateFormatted . "\n\n";
         
         $message .= "📊 **سهمیه‌های مصرفی:**\n\n";
         

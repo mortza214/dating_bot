@@ -29,19 +29,29 @@ class UserSubscription extends Model
     }
     
     public function isActive()
-    {
-        return $this->status === 'active' && 
-               $this->expiry_date > Carbon::now();
+{
+    // بررسی کنید expiry_date مقدار دارد
+    if (!$this->expiry_date) {
+        return false;
     }
     
+    return $this->status === 'active' && 
+           $this->expiry_date > Carbon::now();
+}
+    
     public function daysRemaining()
-    {
-        if (!$this->isActive()) {
-            return 0;
-        }
-        
-        return Carbon::now()->diffInDays($this->expiry_date, false);
+{
+    if (!$this->isActive()) {
+        return 0;
     }
+    
+    // مطمئن شوید expiry_date مقدار دارد
+    if (!$this->expiry_date) {
+        return 0;
+    }
+    
+    return Carbon::now()->diffInDays($this->expiry_date, false);
+}
     
     public function resetDailyLimits()
     {

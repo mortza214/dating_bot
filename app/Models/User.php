@@ -85,19 +85,27 @@ class User extends Model
     }
 
     // 🔴 **متد getActiveSubscription - اصلاح شده (همین متد باعث خطا بود)**
-    public function getActiveSubscription()
-    {
-        try {
-            return $this->subscription()->first();
-        } catch (\Exception $e) {
-            // اگر خطا داد، مستقیم از دیتابیس بگیریم
-            return UserSubscription::where('user_id', $this->id)
-                ->where('status', 'active')
-                ->where('expiry_date', '>', Carbon::now())
-                ->orderBy('created_at', 'DESC')
-                ->first();
+  public function getActiveSubscription()
+{
+    // اطمینان از اینکه expiry_date به درستی خوانده می‌شود
+    $subscription = UserSubscription::where('user_id', $this->id)
+        ->where('status', 'active')
+        ->where('expiry_date', '>', Carbon::now())
+        ->orderBy('created_at', 'DESC')
+        ->first();
+    
+    if ($subscription) {
+        error_log("Subscription found, expiry_date: " . $subscription->expiry_date);
+        error_log("Type of expiry_date: " . gettype($subscription->expiry_date));
+        if ($subscription->expiry_date instanceof \Carbon\Carbon) {
+            error_log("It's a Carbon object, value: " . $subscription->expiry_date->toDateTimeString());
         }
     }
+    
+    return $subscription;
+}
+
+
 
     // 🔴 **متد ساده‌تر برای تست**
     public function activeSubscription()
