@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Core;
 
 require_once __DIR__ . '/../helpers.php';
@@ -98,7 +99,6 @@ class BotCore
 
             error_log("🎯 بهینه‌سازی دیتابیس تکمیل شد. موفق: {$successCount}, خطا: {$errorCount}");
             self::$databaseOptimized = true;
-
         } catch (\Exception $e) {
             error_log("❌ خطا در بهینه‌سازی دیتابیس: " . $e->getMessage());
         }
@@ -143,7 +143,6 @@ class BotCore
                 }
                 echo "⏳ No new updates\n";
             }
-
         } catch (\Exception $e) {
             error_log("❌ Bot Error: " . $e->getMessage());
             echo "❌ Error: " . $e->getMessage() . "\n";
@@ -171,7 +170,6 @@ class BotCore
             } else {
                 echo "⏳ No new updates (without manager)\n";
             }
-
         } catch (\Exception $e) {
             error_log("❌ Error in handleUpdateWithoutManager: " . $e->getMessage());
         }
@@ -227,7 +225,6 @@ class BotCore
                 }
 
                 return $user;
-
             } catch (\Exception $e) {
                 echo "❌ Eloquent failed: " . $e->getMessage() . "\n";
                 // ادامه با روش PDO
@@ -309,185 +306,201 @@ class BotCore
         }
     }
     // این متد را اضافه کنید و با دستور /resetstate فراخوانی کنید
-private function forceResetState($user, $chatId)
-{
-    error_log("🚨 FORCE RESET STATE - Before: " . $user->state);
-    $user->update(['state' => 'main_menu']);
-    error_log("🚨 FORCE RESET STATE - After: " . $user->state);
-    
-    $this->telegram->sendMessage($chatId, "✅ وضعیت سیستم کاملاً بازنشانی شد. اکنون می‌توانید به طور عادی از ربات استفاده کنید.");
-    $this->showMainMenu($user, $chatId);
-}
+    private function forceResetState($user, $chatId)
+    {
+        error_log("🚨 FORCE RESET STATE - Before: " . $user->state);
+        $user->update(['state' => 'main_menu']);
+        error_log("🚨 FORCE RESET STATE - After: " . $user->state);
 
-private function sendPreStartWelcome($chatId, $userId)
-{
-    $message = "👋 **سلام! خوش اومدی**\n\n";
-    $message .= "به **ربات همسر یابی ** خوش آمدید! 🌸\n\n";
-    $message .= "📋 **قبل از شروع، چند نکته:**\n";
-    $message .= "• پروفایل شما کاملاً محرمانه است\n";
-    $message .= "• می‌توانید محدوده سنی و موقعیت مکانی مشخص کنید\n";
-    $message .= "• ارتباط از طریق چت امن انجام می‌شود\n\n";
-    $message .= "💫 **آماده‌ای شروع کنی؟**";
-    
-    $keyboard = [
-        'inline_keyboard' => [
-            [
-                ['text' => 'بله، شروع کنیم! 🚀', 'callback_data' => 'complete_registration']
-            ],
-            [
-                ['text' => 'راهنما 📖', 'callback_data' => 'help'],
-                ['text' => 'قوانین 📜', 'callback_data' => 'rules']
+        $this->telegram->sendMessage($chatId, "✅ وضعیت سیستم کاملاً بازنشانی شد. اکنون می‌توانید به طور عادی از ربات استفاده کنید.");
+        $this->showMainMenu($user, $chatId);
+    }
+
+    private function sendPreStartWelcome($chatId, $userId)
+    {
+        $message = "👋 **سلام! خوش اومدی**\n\n";
+        $message .= "به **ربات همسر یابی ** خوش آمدید! 🌸\n\n";
+        $message .= "📋 **قبل از شروع، چند نکته:**\n";
+        $message .= "• پروفایل شما کاملاً محرمانه است\n";
+        $message .= "• می‌توانید محدوده سنی و موقعیت مکانی مشخص کنید\n";
+        $message .= "• ارتباط از طریق چت امن انجام می‌شود\n\n";
+        $message .= "💫 **آماده‌ای شروع کنی؟**";
+
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => 'بله، شروع کنیم! 🚀', 'callback_data' => 'complete_registration']
+                ],
+                [
+                    ['text' => 'راهنما 📖', 'callback_data' => 'help'],
+                    ['text' => 'قوانین 📜', 'callback_data' => 'rules']
+                ]
             ]
-        ]
-    ];
-    
-    // ذخیره کاربر موقت
-    $tempUser = new User();
-    $tempUser->id = $userId;
-    $tempUser->chat_id = $chatId;
-    $tempUser->status = 'pre_start';
-    $tempUser->save();
-    
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
+        ];
+
+        // ذخیره کاربر موقت
+        $tempUser = new User();
+        $tempUser->id = $userId;
+        $tempUser->chat_id = $chatId;
+        $tempUser->status = 'pre_start';
+        $tempUser->save();
+
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+    }
 
     public function handleMessage($message)
     {
-      $text = $message['text'] ?? '';
-    $chatId = $message['chat']['id'];
-     $userId = $message['from']['id'];
+        $text = $message['text'] ?? '';
+        $chatId = $message['chat']['id'];
+        $userId = $message['from']['id'];
         $from = $message['from']; // اطلاعات کاربر
 
-          // بررسی آیا کاربر جدید است
-    $user = User::find($userId);
-    
+        // بررسی آیا کاربر جدید است
+        $user = User::find($userId);
 
-    $user = \App\Models\User::where('telegram_id', $chatId)->first();
-  $user = $this->findOrCreateUser($from, $chatId);
-    
-    if (!$user) {
-        error_log("❌ Failed to find or create user");
-        return $this->sendMessage($chatId, "خطا در بارگذاری پروفایل. لطفاً دوباره تلاش کنید.");
-    }
 
-     if (!$user && $text === '/start') {
-        // کاربر کاملاً جدید
-        $this->sendPreStartWelcome($chatId, $userId);
-        return;
-    }
+        $user = \App\Models\User::where('telegram_id', $chatId)->first();
+        $user = $this->findOrCreateUser($from, $chatId);
 
-    
-           
-
-    error_log("📝 handleMessage - User state: " . $user->state . " | Text: " . $text);
-
-    //  برای شارژکیف  پول روش جدید 
-    if ($user->state === 'selecting_charge_amount') {
-        $this->handleChargeAmountSelection($user, $chatId, $text);
-        return;
-    }
-    
-    if (strpos($user->state, 'confirming_charge:') === 0) {
-        $this->handleChargeConfirmation($user, $chatId, $text);
-        return;
-    }
-
-     // 🔴 دستورات مربوط به اشتراک
-    if ($text === '💎 اشتراک من') {
-        $this->showMySubscription($user, $chatId);
-        return;
-    }
-    
-    if ($text === '💎 مشاهده پلن‌ها') {
-        $this->handleSubscription($user, $chatId);
-        return;
-    }
-    
-    if ($text === '🔄 تمدید اشتراک') {
-        $this->handleSubscription($user, $chatId);
-        return;
-    }
-    
-    if ($user->state === 'selecting_subscription_plan') {
-        $this->handleSubscriptionPlanSelection($user, $chatId, $text);
-        return;
-    }
-    
-    if (strpos($user->state, 'confirming_subscription:') === 0) {
-        $this->handleSubscriptionConfirmation($user, $chatId, $text);
-        return;
-    }
-
-    // 🔴 مدیریت stateهای ویرایش پروفایل
-    if (str_starts_with($user->state, 'editing_')) {
-        error_log("🔄 User is editing profile field: " . $user->state);
-        $this->handleProfileFieldInput($text, $user, $chatId);
-        return;
-    }
-
-    // 🔴 مدیریت state آپلود عکس
-    if ($user->state === 'awaiting_photo') {
-        error_log("🔄 User is awaiting photo");
-        
-        if (isset($message['photo'])) {
-            error_log("📸 Photo received, processing...");
-            $this->handleProfilePhotoUpload($user, $chatId, $message['photo']);
-        } else {
-            error_log("❌ User in awaiting_photo state but sent text: " . $text);
-            
-            // اگر کاربر روی "بازگشت" کلیک کرد
-            if ($text === '🔙 بازگشت به منوی اصلی') {
-                $user->update(['state' => 'main_menu']);
-                $this->showMainMenu($user, $chatId);
-            } else {
-                $this->telegram->sendMessage($chatId, "❌ لطفاً یک عکس ارسال کنید یا از دکمه بازگشت استفاده کنید.");
-                $this->requestProfilePhoto($user, $chatId);
-            }
+        if (!$user) {
+            error_log("❌ Failed to find or create user");
+            return $this->sendMessage($chatId, "خطا در بارگذاری پروفایل. لطفاً دوباره تلاش کنید.");
         }
-        return;
-    }
 
-    // در handleMessage - بخش stateها
-    // 🔴 اول stateهای خاص را بررسی کن - اما فقط برای دستورات مرتبط
-    if ($user->state === 'awaiting_deactivation_reason') {
-        // فقط اگر متن مربوط به غیرفعال سازی است پردازش کن
-        if (str_starts_with($text, '⏸️ غیرفعال سازی موقت - ') || $text === '🔙 بازگشت به منوی اصلی') {
-            if ($text === '🔙 بازگشت به منوی اصلی') {
+        if (!$user && $text === '/start') {
+            // کاربر کاملاً جدید
+            $this->sendPreStartWelcome($chatId, $userId);
+            return;
+        }
+
+
+
+
+        error_log("📝 handleMessage - User state: " . $user->state . " | Text: " . $text);
+
+        //  برای شارژکیف  پول روش جدید 
+        if ($user->state === 'selecting_charge_amount') {
+            $this->handleChargeAmountSelection($user, $chatId, $text);
+            return;
+        }
+
+        if (strpos($user->state, 'confirming_charge:') === 0) {
+            $this->handleChargeConfirmation($user, $chatId, $text);
+            return;
+        }
+
+        // 🔴 دستورات مربوط به اشتراک
+        if ($text === '💎 اشتراک من') {
+            $this->showMySubscription($user, $chatId);
+            return;
+        }
+
+        if ($text === '💎 مشاهده پلن‌ها') {
+            $this->handleSubscription($user, $chatId);
+            return;
+        }
+
+        if ($text === '🔄 تمدید اشتراک') {
+            $this->handleSubscription($user, $chatId);
+            return;
+        }
+
+        if ($user->state === 'selecting_subscription_plan') {
+            $this->handleSubscriptionPlanSelection($user, $chatId, $text);
+            return;
+        }
+
+        if (strpos($user->state, 'confirming_subscription:') === 0) {
+            $this->handleSubscriptionConfirmation($user, $chatId, $text);
+            return;
+        }
+
+        // 🔴 مدیریت stateهای ویرایش پروفایل
+        if (str_starts_with($user->state, 'editing_')) {
+            error_log("🔄 User is editing profile field: " . $user->state);
+            $this->handleProfileFieldInput($text, $user, $chatId);
+            return;
+        }
+
+        // 🔴 مدیریت state آپلود عکس
+        if ($user->state === 'awaiting_photo') {
+            error_log("🔄 User is awaiting photo");
+
+            if (isset($message['photo'])) {
+                error_log("📸 Photo received, processing...");
+                $this->handleProfilePhotoUpload($user, $chatId, $message['photo']);
+            } else {
+                error_log("❌ User in awaiting_photo state but sent text: " . $text);
+
+                // اگر کاربر روی "بازگشت" کلیک کرد
+                if ($text === '🔙 بازگشت به منوی اصلی') {
+                    $user->update(['state' => 'main_menu']);
+                    $this->showMainMenu($user, $chatId);
+                } else {
+                    $this->telegram->sendMessage($chatId, "❌ لطفاً یک عکس ارسال کنید یا از دکمه بازگشت استفاده کنید.");
+                    $this->requestProfilePhoto($user, $chatId);
+                }
+            }
+            return;
+        }
+
+        // در handleMessage - بخش stateها
+        // 🔴 اول stateهای خاص را بررسی کن - اما فقط برای دستورات مرتبط
+        if ($user->state === 'awaiting_deactivation_reason') {
+            // فقط اگر متن مربوط به غیرفعال سازی است پردازش کن
+            if (str_starts_with($text, '⏸️ غیرفعال سازی موقت - ') || $text === '🔙 بازگشت به منوی اصلی') {
+                if ($text === '🔙 بازگشت به منوی اصلی') {
+                    $this->updateUserState($user->telegram_id, 'main_menu');
+                    $this->showMainMenu($user, $chatId);
+                    return;
+                }
+
+                $reason = str_replace('⏸️ غیرفعال سازی موقت - ', '', $text);
+                $this->handleDeactivationConfirmation($user, $chatId, $reason);
+                return;
+            }
+            // اگر متن غیرمرتبط است، state را ریست کن و به منوی اصلی برگرد
+            else {
                 $this->updateUserState($user->telegram_id, 'main_menu');
                 $this->showMainMenu($user, $chatId);
                 return;
             }
-            
-            $reason = str_replace('⏸️ غیرفعال سازی موقت - ', '', $text);
-            $this->handleDeactivationConfirmation($user, $chatId, $reason);
-            return;
         }
-        // اگر متن غیرمرتبط است، state را ریست کن و به منوی اصلی برگرد
-        else {
-            $this->updateUserState($user->telegram_id, 'main_menu');
-            $this->showMainMenu($user, $chatId);
-            return;
-        }
-    }
 
-    
 
-    // اگر state دیگری دارید، آنها را اینجا بررسی کنید
-    // if ($user->state === 'awaiting_something_else') { ... }
+
+        // اگر state دیگری دارید، آنها را اینجا بررسی کنید
+        // if ($user->state === 'awaiting_something_else') { ... }
         switch ($text) {
-            
-// در handleMessage اضافه کنید:
-case '/resetstate':
-    $this->forceResetState($user, $chatId);
-    break;
+
+            // ربوط به مدیریتد درخواست ها 
+            case '📬 مدیریت درخواست‌ها':
+            case str_contains($text, 'مدیریت درخواست‌ها'):
+                $this->showMyContactRequests($user, $chatId);
+                break;
+
+            case '📥 درخواست‌های ورودی':
+            case str_contains($text, 'درخواست‌های ورودی'):
+                $this->showIncomingRequestsList($user, $chatId, 1);
+                break;
+
+            case '📤 درخواست‌های ارسالی':
+            case str_contains($text, 'درخواست‌های ارسالی'):
+                $this->showOutgoingRequestsList($user, $chatId, 1); // مشابه incoming پیاده‌سازی کنید
+                break;
+
+            // در handleMessage اضافه کنید:
+            case '/resetstate':
+                $this->forceResetState($user, $chatId);
+                break;
             case '/start':
                 $this->showMainMenu($user, $chatId);
                 break;
-                case '/admin':
+            case '/admin':
                 $this->showAdminPanelWithNotification($user, $chatId);
                 break;
 
-                case '**پنل مدیریت**':
+            case '**پنل مدیریت**':
                 $this->showAdminPanelWithNotification($user, $chatId);
                 break;
 
@@ -498,26 +511,26 @@ case '/resetstate':
                 error_log("📜 Returning to contact history");
                 $this->showContactHistory($user, $chatId);
                 break;
-          // در متد handleMessage
-case str_starts_with($text, '👤 '):
-    $this->handleContactHistoryUserClick($user, $chatId, $text);
-    break;
+            // در متد handleMessage
+            case str_starts_with($text, '👤 '):
+                $this->handleContactHistoryUserClick($user, $chatId, $text);
+                break;
 
-case str_starts_with($text, '📦 '):
-    $this->handlePlanSelection($user, $chatId, $text);
-    break;
-            
+            case str_starts_with($text, '📦 '):
+                $this->handlePlanSelection($user, $chatId, $text);
+                break;
+
             case '⚙️ تنظیمات':
                 $this->showSettingsMenu($user, $chatId);
                 break;
-                // در handleMessage در BotCore.php - بخش switch/case
-case '⏸️ غیرفعال سازی موقت':
-    $this->handleDeactivateRequest($user, $chatId);
-    break;
-    
-case '▶️ فعال سازی حساب':
-    $this->handleActivateRequest($user, $chatId);
-    break;
+            // در handleMessage در BotCore.php - بخش switch/case
+            case '⏸️ غیرفعال سازی موقت':
+                $this->handleDeactivateRequest($user, $chatId);
+                break;
+
+            case '▶️ فعال سازی حساب':
+                $this->handleActivateRequest($user, $chatId);
+                break;
             case '👥 سیستم دعوت':
                 $this->handleReferral($user, $chatId);
                 break;
@@ -549,14 +562,14 @@ case '▶️ فعال سازی حساب':
                 break;
 
 
-   
-            
+
+
 
             case '💼 کیف پول':
                 error_log("💼 Calling handleWallet");
                 $this->handleWallet($user, $chatId);
                 break;
-                case '🔙 بازگشت به کیف پول':
+            case '🔙 بازگشت به کیف پول':
                 error_log("💼 Calling handleWallet");
                 $this->handleWallet($user, $chatId);
                 break;
@@ -568,7 +581,7 @@ case '▶️ فعال سازی حساب':
                 $this->handleTransactions($user, $chatId);
                 break;
 
-           
+
 
             case '🔙 بازگشت':
                 $this->showMainMenu($user, $chatId);
@@ -588,16 +601,16 @@ case '▶️ فعال سازی حساب':
                 error_log("📸 Requesting profile photo upload");
                 $this->requestProfilePhoto($user, $chatId);
                 break;
-                case '🔄 تغییر عکس پروفایل':
+            case '🔄 تغییر عکس پروفایل':
                 error_log("📸 Requesting profile photo upload");
                 $this->requestProfilePhoto($user, $chatId);
                 break;
-                 
+
             case '🔙 انصراف':
                 error_log("🔙 Cancelling photo upload");
                 $this->showProfile($user, $chatId);
                 break;
-               
+
             case '💌 دریافت پیشنهاد':
                 error_log("💡 Calling handleGetSuggestion");
                 $this->handleGetSuggestion($user, $chatId);
@@ -630,15 +643,13 @@ case '▶️ فعال سازی حساب':
                 error_log("⚙️ Calling showFilterSettings");
                 $this->handleEditFilters($user, $chatId);
                 break;
-        
+
 
             // در handleMessage - برای دکمه‌های معمولی تاریخچه
             case '💌 پیشنهاد جدید':
                 error_log("💌 Calling handleGetSuggestion from history");
                 $this->handleGetSuggestion($user, $chatId);
                 break;
-
-
         }
     }
     public function processCallbackQuery($callbackQuery)
@@ -646,83 +657,80 @@ case '▶️ فعال سازی حساب':
         PerformanceMonitor::start('callback_' . $callbackQuery['data']);
         $chatId = $callbackQuery['message']['chat']['id'];
         $data = $callbackQuery['data'];
+        $messageId = $callbackQuery['message']['message_id'];
         $from = $callbackQuery['from'];
 
         echo "🔄 Callback: $data from: {$from['first_name']}\n";
 
         $user = $this->findOrCreateUser($from, $chatId);
 
-// در قسمت پردازش callback_query:
+        // در قسمت پردازش callback_query:
 
 
-if (strpos($data, 'like:') === 0) {
-    $targetUserId = str_replace('like:', '', $data);
-    $this->handleLikeAction($user, $targetUserId, $callbackQuery);
-}
-elseif ($data === 'already_liked') {
-    $this->telegram->answerCallbackQuery($callbackQuery['id'], [
-        'text' => 'شما قبلاً این کاربر را لایک کرده‌اید!',
-        'show_alert' => false
-    ]);
-}
-elseif (strpos($data, 'view_liker:') === 0) {
-    $likerId = str_replace('view_liker:', '', $data);
-    $this->showLikerProfile($user, $chatId, $likerId);
-}
-
-    //مربوط به درخواست اطلاعات با تایید 
- elseif (strpos($data, 'view_requester_profile:') === 0) {
-        $parts = explode(':', $data); // استفاده از $data
-        if (count($parts) >= 3) {
-            $requesterId = $parts[1];
-            $requestId = $parts[2];
-            $this->showRequesterProfileForRequest($user, $chatId, $requesterId, $requestId);
-        } else {
-            error_log("Invalid view_requester_profile callback: " . $data);
+        if (strpos($data, 'like:') === 0) {
+            $targetUserId = str_replace('like:', '', $data);
+            $this->handleLikeAction($user, $targetUserId, $callbackQuery);
+        } elseif ($data === 'already_liked') {
+            $this->telegram->answerCallbackQuery($callbackQuery['id'], [
+                'text' => 'شما قبلاً این کاربر را لایک کرده‌اید!',
+                'show_alert' => false
+            ]);
+        } elseif (strpos($data, 'view_liker:') === 0) {
+            $likerId = str_replace('view_liker:', '', $data);
+            $this->showLikerProfile($user, $chatId, $likerId);
         }
-        return;
-    }
-    elseif (strpos($data, 'approve_contact:') === 0) {
-        $requestId = str_replace('approve_contact:', '', $data); // استفاده از $data
-        $this->approveContactRequest($user, $chatId, $requestId);
-        return;
-    }
-    elseif (strpos($data, 'reject_contact:') === 0) {
-        $requestId = str_replace('reject_contact:', '', $data); // استفاده از $data
-        $this->rejectContactRequest($user, $chatId, $requestId);
-        return;
-    }
-    elseif ($data === 'waiting_for_subscription') {
-    $this->telegram->answerCallbackQuery($chatId, [
-        'text' => "⏳ کاربر مورد نظر در حال حاضر اشتراک فعال ندارد. باید منتظر بمانید تا اشتراک تهیه کند.",
-        'show_alert' => true
-    ]);
-    return;
-}
+
+        //مربوط به درخواست اطلاعات با تایید 
+        elseif (strpos($data, 'view_requester_profile:') === 0) {
+            $parts = explode(':', $data); // استفاده از $data
+            if (count($parts) >= 3) {
+                $requesterId = $parts[1];
+                $requestId = $parts[2];
+                $this->showRequesterProfileForRequest($user, $chatId, $requesterId, $requestId);
+            } else {
+                error_log("Invalid view_requester_profile callback: " . $data);
+            }
+            return;
+        } elseif (strpos($data, 'approve_contact:') === 0) {
+            $requestId = str_replace('approve_contact:', '', $data); // استفاده از $data
+            $this->approveContactRequest($user, $chatId, $requestId);
+            return;
+        } elseif (strpos($data, 'reject_contact:') === 0) {
+            $requestId = str_replace('reject_contact:', '', $data); // استفاده از $data
+            $this->rejectContactRequest($user, $chatId, $requestId);
+            return;
+        } elseif ($data === 'waiting_for_subscription') {
+            $this->telegram->answerCallbackQuery($chatId, [
+                'text' => "⏳ کاربر مورد نظر در حال حاضر اشتراک فعال ندارد. باید منتظر بمانید تا اشتراک تهیه کند.",
+                'show_alert' => true
+            ]);
+            return;
+        }
+
 
         // پردازش کلیه callback data ها
         switch ($data) {
-          //  منوی اصلی
+            //  منوی اصلی
             case 'main_menu':
                 $this->showMainMenu($user, $chatId);
                 break;
             case 'profile':
                 $this->handleProfileCommand($user, $chatId);
                 break;
-            
+
             case 'search':
                 $this->handleSearch($user, $chatId);
                 break;
-                       case 'help':
+            case 'help':
                 $this->handleHelp($chatId);
                 break;
 
-            
+
             // منوی پروفایل - سیستم جدید
             case 'profile_edit_start':
                 $this->startProfileEdit($user, $chatId);
                 break;
-           
+
             case 'back_to_profile_menu':
                 $this->showProfilemenu($user, $chatId);
                 break;
@@ -753,7 +761,7 @@ elseif (strpos($data, 'view_liker:') === 0) {
                 $this->handleAutoFixFields($user, $chatId);
                 break;
 
-          
+
             case 'back_to_profile':
                 $this->handleProfileCommand($user, $chatId);
                 break;
@@ -788,7 +796,7 @@ elseif (strpos($data, 'view_liker:') === 0) {
                 $this->optimizeDatabaseManual($user, $chatId);
                 break;
 
-            
+
 
             case str_starts_with($data, 'select_plan:'):
                 $parts = explode(':', $data);
@@ -886,7 +894,7 @@ elseif (strpos($data, 'view_liker:') === 0) {
             // case 'get_suggestion':
             //     $this->handleGetSuggestion($user, $chatId);
             //     break;
-           
+
             case 'debug_field_options':
                 $this->debugFieldOptions($user, $chatId);
                 break;
@@ -898,22 +906,16 @@ elseif (strpos($data, 'view_liker:') === 0) {
                     $this->handleContactRequest($user, $chatId, $suggestedUserId);
                 }
                 break;
-           
+
             case str_starts_with($data, 'contact_history_view:'):
                 $parts = explode(':', $data);
                 if (count($parts) >= 2 && is_numeric($parts[1])) {
                     $requestedUserId = intval($parts[1]);
                     $this->showContactInfo($user, $chatId, $requestedUserId, 0);
                 }
-   
 
-            // case str_starts_with($data, 'contact_history_view:'):
-            //     $parts = explode(':', $data);
-            //     if (count($parts) >= 2 && is_numeric($parts[1])) {
-            //         $requestedUserId = intval($parts[1]);
-            //         $this->showContactDetails($user, $chatId, $requestedUserId);
-            //     }
-            //     break;
+
+               
 
             case 'debug_users':
                 $this->debugUsersStatus($user, $chatId);
@@ -1017,7 +1019,7 @@ elseif (strpos($data, 'view_liker:') === 0) {
             case 'settings':
                 $this->showSettingsMenu($user, $chatId);
                 break;
-          
+
 
             case 'test_filters':
                 $this->testFilterSystem($user, $chatId);
@@ -1025,7 +1027,7 @@ elseif (strpos($data, 'view_liker:') === 0) {
             case 'debug_filters':
                 $this->debugFilterSystem($user, $chatId);
                 break;
-        
+
 
             case 'update_gender_filter':
                 $this->updateGenderFilter($user, $chatId);
@@ -1101,13 +1103,63 @@ elseif (strpos($data, 'view_liker:') === 0) {
             case 'back_to_main_from_photos':
                 $this->showMainMenu($user, $chatId);
                 break;
-                 // منوی کیف پول
+            // منوی کیف پول
             case 'wallet_charge':
                 $this->handleCharge($user, $chatId);
                 break;
+            case str_starts_with($data, 'view_incoming:'):
+                $requestId = explode(':', $data)[1];
+                $this->showIncomingRequestDetail($user, $chatId, $requestId, $messageId);
+                break;
 
+            case str_starts_with($data, 'incoming_page:'):
+                $page = explode(':', $data)[1];
+                $this->showIncomingRequestsList($user, $chatId, $page);
+                break;
 
+            case str_starts_with($data, 'approve_request:'):
+                $requestId = explode(':', $data)[1];
+                $this->approveContactRequest($user, $chatId, $requestId, $messageId);
+                break;
 
+            case str_starts_with($data, 'reject_request:'):
+                $requestId = explode(':', $data)[1];
+                $this->rejectContactRequest($user, $chatId, $requestId, $messageId);
+                break;
+
+            // case str_starts_with($data, 'view_profile:'):
+            //     $userId = explode(':', $data)[1];
+            //     $this->showUserProfileForRequest($user, $chatId, $userId, $messageId);
+            //     break;
+
+            case str_starts_with($data, 'next_incoming:'):
+                $requestId = explode(':', $data)[1];
+                $this->showNextIncomingRequest($user, $chatId, $requestId, $messageId);
+                break;
+
+            case str_starts_with($data, 'prev_incoming:'):
+                $requestId = explode(':', $data)[1];
+                $this->showPrevIncomingRequest($user, $chatId, $requestId, $messageId);
+                break;
+
+            case $data === 'back_to_incoming_list':
+                $this->showIncomingRequestsList($user, $chatId, 1);
+                break;
+
+            case $data === 'back_to_requests_menu':
+                $this->showMyContactRequests($user, $chatId);
+                break;
+
+            case str_starts_with($data, 'view_contact_info:'):
+                $parts = explode(':', $data);
+                if (count($parts) >= 3) {
+                    $requestedUserId = $parts[1];
+                    $requestId = $parts[2];
+                    $this->showContactInfo($user, $chatId, $requestedUserId, $requestId);
+                } 
+                break;
+
+            
         }
 
         $this->telegram->answerCallbackQuery($callbackQuery['id']);
@@ -1303,7 +1355,6 @@ elseif (strpos($data, 'view_liker:') === 0) {
             error_log("📋 فیلدهای missing: " . implode(', ', $missingFields));
 
             return $missingFields;
-
         } catch (\Exception $e) {
             error_log("❌ خطا در syncProfileFields: " . $e->getMessage());
             return [];
@@ -1337,7 +1388,6 @@ elseif (strpos($data, 'view_liker:') === 0) {
             }
 
             return "✅ فیلدهای زیر به جدول users اضافه شدند:\n" . implode(', ', $addedFields);
-
         } catch (\Exception $e) {
             error_log("❌ خطا در autoAddMissingFields: " . $e->getMessage());
             return "❌ خطا در اضافه کردن فیلدها: " . $e->getMessage();
@@ -1381,7 +1431,6 @@ elseif (strpos($data, 'view_liker:') === 0) {
 
             error_log("✅ فیلد {$field->field_name} با نوع {$fieldType} به users اضافه شد");
             return true;
-
         } catch (\Exception $e) {
             error_log("❌ خطا در اضافه کردن فیلد {$field->field_name} به users: " . $e->getMessage());
             return false;
@@ -1399,109 +1448,125 @@ elseif (strpos($data, 'view_liker:') === 0) {
         ];
 
         return $types[$fieldType] ?? 'VARCHAR(255) NULL';
-
     }
 
     // ==================== منوی اصلی ====================
     private function showMainMenu($user, $chatId)
-{
-    $wallet = $user->getWallet();
-  //  $cost = $this->getContactRequestCost();
+    {
 
-    // بررسی دقیق وضعیت پروفایل
-    $actualCompletion = $this->checkProfileCompletion($user);
-    $completionPercent = $this->calculateProfileCompletion($user);
+        $counts = $this->getContactRequestCounts($user->id);
 
-    // اگر وضعیت در دیتابیس با واقعیت تطابق ندارد، آپدیت کن
-    if ($user->is_profile_completed != $actualCompletion) {
-        $user->update(['is_profile_completed' => $actualCompletion]);
+        $contactRequestText = '📬 مدیریت درخواست‌ها';
+        $notificationText = '';
+
+        if ($counts['incoming_pending'] > 0) {
+            $notificationText .= " ({$counts['incoming_pending']}📥)";
+        }
+        if ($counts['outgoing_approved'] > 0) {
+            $notificationText .= " ({$counts['outgoing_approved']}✅)";
+        }
+
+        $contactRequestText .= $notificationText;
+
+        $wallet = $user->getWallet();
+        //  $cost = $this->getContactRequestCost();
+
+        // بررسی دقیق وضعیت پروفایل
+        $actualCompletion = $this->checkProfileCompletion($user);
+        $completionPercent = $this->calculateProfileCompletion($user);
+
+        // اگر وضعیت در دیتابیس با واقعیت تطابق ندارد، آپدیت کن
+        if ($user->is_profile_completed != $actualCompletion) {
+            $user->update(['is_profile_completed' => $actualCompletion]);
+        }
+
+        $statusText = $user->is_active ? '🟢 فعال' : '🔴 غیرفعال';
+
+        // 🔴 دریافت آمار لایک‌ها
+        $receivedLikes = \App\Models\Like::getReceivedCount($user->id);
+        $mutualLikes = \App\Models\Like::getMutualCount($user->id);
+
+
+        $message = "🎯 **منوی اصلی ربات همسر یابی**\n\n";
+        $message .= "👤 کاربر: " . $user->first_name . "\n";
+        $message .= "💰 موجودی: " . number_format($wallet->balance) . " تومان\n";
+        $message .= "📊 وضعیت پروفایل: " . ($actualCompletion ? "✅ تکمیل شده" : "❌ ناقص ({$completionPercent}%)") . "\n\n";
+        $message .= "📱 وضعیت حساب: {$statusText}\n\n";
+
+        // 🔴 اضافه کردن وضعیت اشتراک
+        $subscription = $user->getActiveSubscription();
+        if ($subscription) {
+            $daysRemaining = $subscription->daysRemaining();
+            $message .= "💎 اشتراک: {$subscription->plan->name}\n";
+            $message .= "⏳ باقی‌مانده: {$daysRemaining} روز\n";
+        } else {
+            $message .= "🔴 اشتراک: فعال نیست\n";
+        }
+
+        // 🔴 اضافه کردن آمار لایک‌ها
+        $message .= "❤️ لایک‌های دریافتی: " . $receivedLikes . "\n";
+        $message .= "🤝 لایک‌های متقابل: " . $mutualLikes . "\n\n";
+
+        // 🔴 اضافه کردن وضعیت پیشنهادات
+        $suggestionCount = \App\Models\UserSuggestion::getUserSuggestionCount($user->id);
+        $message .= "💌 پیشنهادات دریافت شده: " . $suggestionCount . "\n\n";
+
+        if (!$actualCompletion) {
+            $message .= "⚠️ **توجه:** برای استفاده از امکانات ربات، لطفاً پروفایل خود را کامل کنید.\n\n";
+        }
+
+        $message .= "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:";
+
+        if ($this->isSuperAdmin($user->telegram_id)) {
+            $keyboard = [
+                'keyboard' => [
+                    [
+                        ['text' => '💼 کیف پول'],
+                        ['text' => '💌 دریافت پیشنهاد']
+                    ],
+                    [
+                        ['text' => '📊 پروفایل من'],
+                        ['text' =>  '💎 اشتراک من'],
+                        ['text' => '👥 سیستم دعوت']
+                    ],
+                    [
+                        ['text' => 'ℹ️ راهنمای استفاده'],
+                        ['text' => $contactRequestText],
+                        ['text' => '⚙️ تنظیمات']
+                    ],
+                    [
+                        ['text' => ' **پنل مدیریت**']
+                    ]
+                ],
+                'resize_keyboard' => true,
+                'one_time_keyboard' => false
+            ];
+        } else {
+            // کیبورد معمولی (ReplyKeyboard) برای پایین صفحه
+            $keyboard = [
+                'keyboard' => [
+                    [
+                        ['text' => '💼 کیف پول'],
+                        ['text' => '💌 دریافت پیشنهاد']
+                    ],
+                    [
+                        ['text' => '📊 پروفایل من'],
+                        ['text' =>  '💎 اشتراک من'],
+                        ['text' => '👥 سیستم دعوت']
+                    ],
+                    [
+                        ['text' => 'ℹ️ راهنمای استفاده'],
+                        ['text' => $contactRequestText],
+                        ['text' => '⚙️ تنظیمات']
+                    ],
+                ],
+                'resize_keyboard' => true,
+                'one_time_keyboard' => false
+            ];
+        }
+
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
     }
-    
-    $statusText = $user->is_active ? '🟢 فعال' : '🔴 غیرفعال';
-
-    // 🔴 دریافت آمار لایک‌ها
-   $receivedLikes = \App\Models\Like::getReceivedCount($user->id);
-    $mutualLikes = \App\Models\Like::getMutualCount($user->id);
-    
-
-    $message = "🎯 **منوی اصلی ربات همسر یابی**\n\n";
-    $message .= "👤 کاربر: " . $user->first_name . "\n";
-    $message .= "💰 موجودی: " . number_format($wallet->balance) . " تومان\n";
-    $message .= "📊 وضعیت پروفایل: " . ($actualCompletion ? "✅ تکمیل شده" : "❌ ناقص ({$completionPercent}%)") . "\n\n";
-    $message .= "📱 وضعیت حساب: {$statusText}\n\n";
-
-     // 🔴 اضافه کردن وضعیت اشتراک
-    $subscription = $user->getActiveSubscription();
-    if ($subscription) {
-        $daysRemaining = $subscription->daysRemaining();
-        $message .= "💎 اشتراک: {$subscription->plan->name}\n";
-        $message .= "⏳ باقی‌مانده: {$daysRemaining} روز\n";
-    } else {
-        $message .= "🔴 اشتراک: فعال نیست\n";
-    }
-    
-    // 🔴 اضافه کردن آمار لایک‌ها
-    $message .= "❤️ لایک‌های دریافتی: " . $receivedLikes . "\n";
-    $message .= "🤝 لایک‌های متقابل: " . $mutualLikes . "\n\n";
-
-    // 🔴 اضافه کردن وضعیت پیشنهادات
-    $suggestionCount = \App\Models\UserSuggestion::getUserSuggestionCount($user->id);
-    $message .= "💌 پیشنهادات دریافت شده: " . $suggestionCount . "\n\n";
-
-    if (!$actualCompletion) {
-        $message .= "⚠️ **توجه:** برای استفاده از امکانات ربات، لطفاً پروفایل خود را کامل کنید.\n\n";
-    }
-
-    $message .= "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:";
-    
-    if ($this->isSuperAdmin($user->telegram_id)) {
-        $keyboard = [
-            'keyboard' => [
-                [
-                    ['text' => '💼 کیف پول'],
-                    ['text' => '💌 دریافت پیشنهاد']
-                ],
-                [
-                    ['text' => '📊 پروفایل من'],   
-                    ['text' =>  '💎 اشتراک من'],
-                    ['text' => '👥 سیستم دعوت']
-                ],
-                [
-                    ['text' => 'ℹ️ راهنمای استفاده'],
-                    ['text' => '⚙️ تنظیمات']
-                ],
-                [
-                    ['text' => ' **پنل مدیریت**']
-                ]
-            ],
-            'resize_keyboard' => true,
-            'one_time_keyboard' => false
-        ];
-    } else {
-        // کیبورد معمولی (ReplyKeyboard) برای پایین صفحه
-        $keyboard = [
-            'keyboard' => [
-                [
-                    ['text' => '💼 کیف پول'],
-                    ['text' => '💌 دریافت پیشنهاد']
-                ],
-                [
-                    ['text' => '📊 پروفایل من'],
-                    ['text' =>  '💎 اشتراک من'],
-                    ['text' => '👥 سیستم دعوت']
-                ],
-                [
-                    ['text' => 'ℹ️ راهنمای استفاده'],
-                    ['text' => '⚙️ تنظیمات']
-                ],
-            ],
-            'resize_keyboard' => true,
-            'one_time_keyboard' => false
-        ];
-    }
-
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
     private function showSettingsMenu($user, $chatId)
     {
         $wallet = $user->getWallet();
@@ -1512,7 +1577,7 @@ elseif (strpos($data, 'view_liker:') === 0) {
         $userFilters = UserFilter::getFilters($user->id);
         $activeFiltersCount = 0;
 
-         
+
         foreach ($userFilters as $value) {
             if (!empty($value) && $value !== '') {
                 if (is_array($value)) {
@@ -1523,8 +1588,8 @@ elseif (strpos($data, 'view_liker:') === 0) {
                 }
             }
         }
-$statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '▶️ فعال سازی حساب';
- $statusText = $user->is_active ? '🟢 فعال' : '🔴 غیرفعال';
+        $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '▶️ فعال سازی حساب';
+        $statusText = $user->is_active ? '🟢 فعال' : '🔴 غیرفعال';
 
         $filterStatus = $activeFiltersCount > 0 ? "✅ فعال ({$activeFiltersCount} فیلتر)" : "❌ غیرفعال";
 
@@ -1663,103 +1728,103 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
         return empty($emptyFields);
     }
     private function showFieldEdit($field, $user, $chatId, $currentIndex, $totalFields)
-{
-    
-    // تنظیم state برای فیلد جاری - بدون پاک کردن state در ابتدا
-    $user->update(['state' => "editing_{$field->field_name}"]);
-    
-    $message = "📝 **ویرایش پروفایل**\n\n";
-    $message .= "🔄 پیشرفت: " . ($currentIndex + 1) . "/{$totalFields}\n";
+    {
 
-    // نمایش وضعیت فیلدهای اجباری
-    $emptyRequiredFields = $this->getEmptyRequiredFields($user);
-    if (!empty($emptyRequiredFields) && $field->is_required) {
-        $message .= "🔴 فیلدهای اجباری باقی‌مانده: " . count($emptyRequiredFields) . "\n\n";
-    } else if (empty($emptyRequiredFields)) {
-        $message .= "✅ تمام فیلدهای اجباری تکمیل شدند!\n\n";
-    } else {
-        $message .= "\n";
-    }
+        // تنظیم state برای فیلد جاری - بدون پاک کردن state در ابتدا
+        $user->update(['state' => "editing_{$field->field_name}"]);
 
-    $message .= "**{$field->field_label}**";
-    $message .= $field->is_required ? " 🔴" : " 🔵";
-    $message .= "\n";
+        $message = "📝 **ویرایش پروفایل**\n\n";
+        $message .= "🔄 پیشرفت: " . ($currentIndex + 1) . "/{$totalFields}\n";
 
-    // نمایش مقدار فعلی اگر وجود دارد
-    $currentValue = $user->{$field->field_name};
-    if ($currentValue) {
-        if ($field->field_type === 'select' && is_numeric($currentValue)) {
-            $displayValue = $this->convertSelectValueToText($field, $currentValue);
-            $message .= "📋 مقدار فعلی: {$displayValue}\n\n";
+        // نمایش وضعیت فیلدهای اجباری
+        $emptyRequiredFields = $this->getEmptyRequiredFields($user);
+        if (!empty($emptyRequiredFields) && $field->is_required) {
+            $message .= "🔴 فیلدهای اجباری باقی‌مانده: " . count($emptyRequiredFields) . "\n\n";
+        } else if (empty($emptyRequiredFields)) {
+            $message .= "✅ تمام فیلدهای اجباری تکمیل شدند!\n\n";
         } else {
-            $message .= "📋 مقدار فعلی: {$currentValue}\n\n";
+            $message .= "\n";
         }
-    } else {
+
+        $message .= "**{$field->field_label}**";
+        $message .= $field->is_required ? " 🔴" : " 🔵";
         $message .= "\n";
-    }
 
-    // راهنمای ورودی بر اساس نوع فیلد
-    if ($field->field_type === 'select') {
-        $message .= "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:\n\n";
-
-        $options = $this->getFieldOptions($field);
-        if (!empty($options)) {
-            foreach ($options as $index => $option) {
-                $message .= ($index + 1) . "️⃣ {$option}\n";
+        // نمایش مقدار فعلی اگر وجود دارد
+        $currentValue = $user->{$field->field_name};
+        if ($currentValue) {
+            if ($field->field_type === 'select' && is_numeric($currentValue)) {
+                $displayValue = $this->convertSelectValueToText($field, $currentValue);
+                $message .= "📋 مقدار فعلی: {$displayValue}\n\n";
+            } else {
+                $message .= "📋 مقدار فعلی: {$currentValue}\n\n";
             }
-            $message .= "\n📝 می‌توانید عدد گزینه مورد نظر را وارد کنید.";
         } else {
-            $message .= "⚠️ هیچ گزینه‌ای تعریف نشده است.";
+            $message .= "\n";
         }
-    } else {
-       $message .= "لطفاً " . $field->field_label . "   خود را وارد کنید:\n";
-        if ($field->field_type === 'number') {
-            $message .= "🔢 (عدد - فارسی یا انگلیسی قابل قبول است)";
+
+        // راهنمای ورودی بر اساس نوع فیلد
+        if ($field->field_type === 'select') {
+            $message .= "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:\n\n";
+
+            $options = $this->getFieldOptions($field);
+            if (!empty($options)) {
+                foreach ($options as $index => $option) {
+                    $message .= ($index + 1) . "️⃣ {$option}\n";
+                }
+                $message .= "\n📝 می‌توانید عدد گزینه مورد نظر را وارد کنید.";
+            } else {
+                $message .= "⚠️ هیچ گزینه‌ای تعریف نشده است.";
+            }
         } else {
-            $message .= "📝 (متن)";
+            $message .= "لطفاً " . $field->field_label . "   خود را وارد کنید:\n";
+            if ($field->field_type === 'number') {
+                $message .= "🔢 (عدد - فارسی یا انگلیسی قابل قبول است)";
+            } else {
+                $message .= "📝 (متن)";
+            }
         }
-    }
 
-    // هشدار برای فیلدهای اجباری خالی
-    if ($field->is_required && empty($currentValue)) {
-        $message .= "\n\n⚠️ این فیلد اجباری است و باید پر شود.";
-    }
+        // هشدار برای فیلدهای اجباری خالی
+        if ($field->is_required && empty($currentValue)) {
+            $message .= "\n\n⚠️ این فیلد اجباری است و باید پر شود.";
+        }
 
-    // ایجاد کیبورد دینامیک
-    $keyboard = ['inline_keyboard' => []];
+        // ایجاد کیبورد دینامیک
+        $keyboard = ['inline_keyboard' => []];
 
-    // دکمه‌های ناوبری
-    $navButtons = [];
+        // دکمه‌های ناوبری
+        $navButtons = [];
 
-    // دکمه قبلی (اگر اولین فیلد نیستیم)
-    if ($currentIndex > 0) {
-        $navButtons[] = ['text' => '⏪ قبلی', 'callback_data' => 'profile_prev_field'];
-    }
+        // دکمه قبلی (اگر اولین فیلد نیستیم)
+        if ($currentIndex > 0) {
+            $navButtons[] = ['text' => '⏪ قبلی', 'callback_data' => 'profile_prev_field'];
+        }
 
-    // دکمه رد شدن (فقط برای فیلدهای غیرالزامی)
-    if (!$field->is_required) {
-        $navButtons[] = ['text' => '⏭️ رد شدن', 'callback_data' => 'profile_skip_field'];
-    }
+        // دکمه رد شدن (فقط برای فیلدهای غیرالزامی)
+        if (!$field->is_required) {
+            $navButtons[] = ['text' => '⏭️ رد شدن', 'callback_data' => 'profile_skip_field'];
+        }
 
-    if (!empty($navButtons)) {
-        $keyboard['inline_keyboard'][] = $navButtons;
-    }
+        if (!empty($navButtons)) {
+            $keyboard['inline_keyboard'][] = $navButtons;
+        }
 
-    // دکمه بعدی (اگر آخرین فیلد نیستیم)
-    if ($currentIndex < $totalFields - 1) {
+        // دکمه بعدی (اگر آخرین فیلد نیستیم)
+        if ($currentIndex < $totalFields - 1) {
+            $keyboard['inline_keyboard'][] = [
+                ['text' => '⏩ بعدی', 'callback_data' => 'profile_next_field']
+            ];
+        }
+
+        // دکمه‌های پایانی
         $keyboard['inline_keyboard'][] = [
-            ['text' => '⏩ بعدی', 'callback_data' => 'profile_next_field']
+            ['text' => '💾 ذخیره و پایان', 'callback_data' => 'profile_save_exit'],
+            ['text' => '❌ انصراف', 'callback_data' => 'back_to_profile_menu']
         ];
+
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
     }
-
-    // دکمه‌های پایانی
-    $keyboard['inline_keyboard'][] = [
-        ['text' => '💾 ذخیره و پایان', 'callback_data' => 'profile_save_exit'],
-        ['text' => '❌ انصراف', 'callback_data' => 'back_to_profile_menu']
-    ];
-
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
     private function handleNextField($user, $chatId)
     {
         $activeFields = ProfileField::getActiveFields();
@@ -2033,7 +2098,7 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
                 elseif (!empty($text)) {
                     if ($text === '❌ لغو آپلود عکس') {
                         $this->sendMessage($chatId, "آپلود عکس لغو شد.");
-                     //   $this->showPhotoManagementMenu($user, $chatId);
+                        //   $this->showPhotoManagementMenu($user, $chatId);
                     } else {
                         $this->sendMessage($chatId, "لطفاً یک عکس ارسال کنید. برای لغو از گزینه '❌ لغو آپلود عکس' استفاده کنید.");
 
@@ -2045,10 +2110,10 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
                 }
                 break;
 
-           
 
 
-            
+
+
 
             default:
                 return $this->showMainMenu($user, $chatId);
@@ -2076,95 +2141,94 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
         // بازگشت به حالت عادی
         $user->update(['state' => 'main_menu']);
     }
-      
-    
 
-     private function handleProfileFieldInput($text, $user, $chatId)
-{
-    $currentState = $user->state;
-    
-    // اگر کاربر روی دکمه بازگشت کلیک کرد
-    if ($text === '🔙 بازگشت به ویرایش پروفایل' || $text === '❌ انصراف') {
-        $user->update(['state' => 'main_menu']);
-        $this->showProfile($user, $chatId);
-        return;
-    }
 
-    $fieldName = str_replace('editing_', '', $currentState);
 
-    // پیدا کردن فیلد - اصلاح خطای تایپو
-   $field = ProfileField::whereFieldName($fieldName);
+    private function handleProfileFieldInput($text, $user, $chatId)
+    {
+        $currentState = $user->state;
 
-    if (!$field) {
-        $this->telegram->sendMessage($chatId, "❌ خطای سیستم. لطفاً مجدد تلاش کنید.");
-        $user->update(['state' => 'main_menu']);
-        return;
-    }
-
-    // لاگ برای دیباگ
-    error_log("Processing field: {$fieldName}, Input: {$text}");
-
-    // تبدیل اعداد فارسی به انگلیسی برای فیلدهای عددی
-    $processedText = $text;
-    if ($field->field_type === 'number' || $field->field_type === 'select') {
-        $processedText = $this->validateAndConvertNumbers($text);
-
-        if (empty($processedText)) {
-            $this->telegram->sendMessage($chatId, "❌ لطفاً یک عدد معتبر وارد کنید\nمثال: ۱۷۵ یا 175");
-            return;
-        }
-    }
-
-    // اعتبارسنجی مقدار وارد شده
-    $validationResult = $field->validate($processedText);
-    if ($validationResult !== true) {
-        $this->telegram->sendMessage($chatId, "❌ {$validationResult}");
-        return;
-    }
-
-    // برای فیلدهای select، عدد رو به عنوان index ذخیره می‌کنیم
-    $valueToSave = $processedText;
-
-    // ذخیره مقدار در دیتابیس
-    try {
-        // بررسی وجود فیلد در مدل User
-        $fillable = $user->getFillable();
-        if (!in_array($fieldName, $fillable)) {
-            error_log("❌ Field {$fieldName} not in fillable attributes - Migration needed!");
-            $this->telegram->sendMessage($chatId, "⚠️ سیستم در حال بروزرسانی است. لطفاً چند دقیقه دیگر مجدد تلاش کنید.");
+        // اگر کاربر روی دکمه بازگشت کلیک کرد
+        if ($text === '🔙 بازگشت به ویرایش پروفایل' || $text === '❌ انصراف') {
+            $user->update(['state' => 'main_menu']);
+            $this->showProfile($user, $chatId);
             return;
         }
 
-        $updateData = [$fieldName => $valueToSave];
-        error_log("Updating user with data: " . print_r($updateData, true));
+        $fieldName = str_replace('editing_', '', $currentState);
 
-        $result = $user->update($updateData);
+        // پیدا کردن فیلد - اصلاح خطای تایپو
+        $field = ProfileField::whereFieldName($fieldName);
 
-        if ($result) {
-            error_log("✅ Field {$fieldName} updated successfully to: {$valueToSave}");
+        if (!$field) {
+            $this->telegram->sendMessage($chatId, "❌ خطای سیستم. لطفاً مجدد تلاش کنید.");
+            $user->update(['state' => 'main_menu']);
+            return;
+        }
 
-            // نمایش تأیید برای کاربر
-            if ($field->field_type === 'select') {
-                $selectedText = $this->convertSelectValueToText($field, $valueToSave);
-                $this->telegram->sendMessage($chatId, "✅ {$field->field_label} شما به: **{$selectedText}** تنظیم شد");
-            } else {
-                $this->telegram->sendMessage($chatId, "✅ {$field->field_label} شما به: **{$valueToSave}** تنظیم شد");
+        // لاگ برای دیباگ
+        error_log("Processing field: {$fieldName}, Input: {$text}");
+
+        // تبدیل اعداد فارسی به انگلیسی برای فیلدهای عددی
+        $processedText = $text;
+        if ($field->field_type === 'number' || $field->field_type === 'select') {
+            $processedText = $this->validateAndConvertNumbers($text);
+
+            if (empty($processedText)) {
+                $this->telegram->sendMessage($chatId, "❌ لطفاً یک عدد معتبر وارد کنید\nمثال: ۱۷۵ یا 175");
+                return;
             }
-        } else {
-            error_log("❌ Failed to update field {$fieldName}");
+        }
+
+        // اعتبارسنجی مقدار وارد شده
+        $validationResult = $field->validate($processedText);
+        if ($validationResult !== true) {
+            $this->telegram->sendMessage($chatId, "❌ {$validationResult}");
+            return;
+        }
+
+        // برای فیلدهای select، عدد رو به عنوان index ذخیره می‌کنیم
+        $valueToSave = $processedText;
+
+        // ذخیره مقدار در دیتابیس
+        try {
+            // بررسی وجود فیلد در مدل User
+            $fillable = $user->getFillable();
+            if (!in_array($fieldName, $fillable)) {
+                error_log("❌ Field {$fieldName} not in fillable attributes - Migration needed!");
+                $this->telegram->sendMessage($chatId, "⚠️ سیستم در حال بروزرسانی است. لطفاً چند دقیقه دیگر مجدد تلاش کنید.");
+                return;
+            }
+
+            $updateData = [$fieldName => $valueToSave];
+            error_log("Updating user with data: " . print_r($updateData, true));
+
+            $result = $user->update($updateData);
+
+            if ($result) {
+                error_log("✅ Field {$fieldName} updated successfully to: {$valueToSave}");
+
+                // نمایش تأیید برای کاربر
+                if ($field->field_type === 'select') {
+                    $selectedText = $this->convertSelectValueToText($field, $valueToSave);
+                    $this->telegram->sendMessage($chatId, "✅ {$field->field_label} شما به: **{$selectedText}** تنظیم شد");
+                } else {
+                    $this->telegram->sendMessage($chatId, "✅ {$field->field_label} شما به: **{$valueToSave}** تنظیم شد");
+                }
+            } else {
+                error_log("❌ Failed to update field {$fieldName}");
+                $this->telegram->sendMessage($chatId, "❌ خطا در ذخیره اطلاعات. لطفاً مجدد تلاش کنید.");
+                return;
+            }
+        } catch (\Exception $e) {
+            error_log("Error updating profile field {$fieldName}: " . $e->getMessage());
             $this->telegram->sendMessage($chatId, "❌ خطا در ذخیره اطلاعات. لطفاً مجدد تلاش کنید.");
             return;
         }
 
-    } catch (\Exception $e) {
-        error_log("Error updating profile field {$fieldName}: " . $e->getMessage());
-        $this->telegram->sendMessage($chatId, "❌ خطا در ذخیره اطلاعات. لطفاً مجدد تلاش کنید.");
-        return;
+        // رفتن به فیلد بعدی - استفاده از متد موجود
+        $this->handleNextField($user, $chatId);
     }
-
-    // رفتن به فیلد بعدی - استفاده از متد موجود
-    $this->handleNextField($user, $chatId);
-}
 
     private function debugSelectFields($user, $chatId)
     {
@@ -2216,137 +2280,137 @@ $statusButton = $user->is_active ? '⏸️ غیرفعال سازی موقت' : '
         $this->telegram->sendMessage($chatId, $message, $keyboard);
     }
 
-private function toPersianDateTime($date, $showTime = true)
-{
-    if (!$date) {
-        return 'نامشخص';
+    private function toPersianDateTime($date, $showTime = true)
+    {
+        if (!$date) {
+            return 'نامشخص';
+        }
+
+        try {
+            $jdate = \Morilog\Jalali\Jalalian::fromDateTime($date);
+
+            if ($showTime) {
+                return $jdate->format('Y/m/d H:i');
+            } else {
+                return $jdate->format('Y/m/d');
+            }
+        } catch (\Exception $e) {
+            error_log("Persian date conversion error: " . $e->getMessage());
+
+            // در صورت خطا، تاریخ میلادی برگردان
+            if ($date instanceof \Carbon\Carbon) {
+                return $date->format('Y/m/d H:i');
+            }
+            return date('Y/m/d H:i', strtotime($date));
+        }
     }
-    
-    try {
-        $jdate = \Morilog\Jalali\Jalalian::fromDateTime($date);
-        
-        if ($showTime) {
-            return $jdate->format('Y/m/d H:i');
+
+    private function handleTransactions($user, $chatId)
+    {
+        $transactions = $user->transactions()->latest()->limit(15)->get();
+        $wallet = $user->getWallet();
+
+        $message = "📋 **آخرین تراکنش‌های شما**\n\n";
+
+        // آمار سریع
+        $totalDeposit = $transactions->where('amount', '>', 0)->sum('amount');
+        $totalWithdraw = abs($transactions->where('amount', '<', 0)->sum('amount'));
+
+        $message .= "💰 **آمار سریع:**\n";
+        $message .= "• کل واریز‌ها: " . number_format($totalDeposit) . " تومان\n";
+        $message .= "• کل برداشت‌ها: " . number_format($totalWithdraw) . " تومان\n";
+        $message .= "• موجودی فعلی: **" . number_format($wallet->balance) . " تومان**\n\n";
+
+        $message .= "📊 **جزئیات تراکنش‌ها:**\n";
+        $message .= "────────────────\n";
+
+        if ($transactions->count() > 0) {
+            $counter = 1;
+            foreach ($transactions as $transaction) {
+                // انتخاب ایموجی مناسب
+                $typeEmoji = $this->getTransactionEmoji($transaction->type);
+
+                // تعیین نوع تراکنش (واریز/برداشت)
+                $isDeposit = $transaction->amount > 0;
+                $sign = $isDeposit ? '➕' : '➖';
+                $amountColor = $isDeposit ? '🟢' : '🔴';
+
+                // تاریخ شمسی
+                $formattedDate = $this->toPersianDateTime($transaction->created_at);
+
+                // متن تراکنش
+                $message .= "{$counter}. {$typeEmoji} **" . $this->getTransactionTypeText($transaction->type) . "**\n";
+                $message .= "   {$amountColor} مبلغ: **" . number_format(abs($transaction->amount)) . " تومان**\n";
+
+                // توضیحات اگر وجود دارد
+                if (!empty($transaction->description)) {
+                    $message .= "   📌 " . $transaction->description . "\n";
+                }
+
+                $message .= "   ⏰ تاریخ: " . $formattedDate . "\n";
+
+                // وضعیت تراکنش (اگر فیلد status وجود دارد)
+                if (isset($transaction->status)) {
+                    $statusText = $this->getTransactionStatusText($transaction->status);
+                    $message .= "   📊 وضعیت: " . $statusText . "\n";
+                }
+
+                $message .= "   ────────────────\n";
+                $counter++;
+            }
+
+            // پیام پایانی اگر تراکنش بیشتری وجود دارد
+            $totalTransactions = $user->transactions()->count();
+            if ($totalTransactions > 15) {
+                $message .= "\n📌 *نکته:* " . ($totalTransactions - 15) . " تراکنش قدیمی‌تر وجود دارد.\n";
+                $message .= "برای مشاهده تمام تراکنش‌ها از بخش گزارشات استفاده کنید.";
+            }
         } else {
-            return $jdate->format('Y/m/d');
+            $message .= "📭 هیچ تراکنشی یافت نشد.\n";
+            $message .= "اولین تراکنش شما می‌تواند شارژ کیف پول یا خرید اشتراک باشد.";
         }
-    } catch (\Exception $e) {
-        error_log("Persian date conversion error: " . $e->getMessage());
-        
-        // در صورت خطا، تاریخ میلادی برگردان
-        if ($date instanceof \Carbon\Carbon) {
-            return $date->format('Y/m/d H:i');
-        }
-        return date('Y/m/d H:i', strtotime($date));
-    }
-}
 
-   private function handleTransactions($user, $chatId)
-{
-    $transactions = $user->transactions()->latest()->limit(15)->get();
-    $wallet = $user->getWallet();
-
-    $message = "📋 **آخرین تراکنش‌های شما**\n\n";
-    
-    // آمار سریع
-    $totalDeposit = $transactions->where('amount', '>', 0)->sum('amount');
-    $totalWithdraw = abs($transactions->where('amount', '<', 0)->sum('amount'));
-    
-    $message .= "💰 **آمار سریع:**\n";
-    $message .= "• کل واریز‌ها: " . number_format($totalDeposit) . " تومان\n";
-    $message .= "• کل برداشت‌ها: " . number_format($totalWithdraw) . " تومان\n";
-    $message .= "• موجودی فعلی: **" . number_format($wallet->balance) . " تومان**\n\n";
-    
-    $message .= "📊 **جزئیات تراکنش‌ها:**\n";
-    $message .= "────────────────\n";
-
-    if ($transactions->count() > 0) {
-        $counter = 1;
-        foreach ($transactions as $transaction) {
-            // انتخاب ایموجی مناسب
-            $typeEmoji = $this->getTransactionEmoji($transaction->type);
-            
-            // تعیین نوع تراکنش (واریز/برداشت)
-            $isDeposit = $transaction->amount > 0;
-            $sign = $isDeposit ? '➕' : '➖';
-            $amountColor = $isDeposit ? '🟢' : '🔴';
-            
-            // تاریخ شمسی
-            $formattedDate = $this->toPersianDateTime($transaction->created_at);
-            
-            // متن تراکنش
-            $message .= "{$counter}. {$typeEmoji} **" . $this->getTransactionTypeText($transaction->type) . "**\n";
-            $message .= "   {$amountColor} مبلغ: **" . number_format(abs($transaction->amount)) . " تومان**\n";
-            
-            // توضیحات اگر وجود دارد
-            if (!empty($transaction->description)) {
-                $message .= "   📌 " . $transaction->description . "\n";
-            }
-            
-            $message .= "   ⏰ تاریخ: " . $formattedDate . "\n";
-            
-            // وضعیت تراکنش (اگر فیلد status وجود دارد)
-            if (isset($transaction->status)) {
-                $statusText = $this->getTransactionStatusText($transaction->status);
-                $message .= "   📊 وضعیت: " . $statusText . "\n";
-            }
-            
-            $message .= "   ────────────────\n";
-            $counter++;
-        }
-        
-        // پیام پایانی اگر تراکنش بیشتری وجود دارد
-        $totalTransactions = $user->transactions()->count();
-        if ($totalTransactions > 15) {
-            $message .= "\n📌 *نکته:* " . ($totalTransactions - 15) . " تراکنش قدیمی‌تر وجود دارد.\n";
-            $message .= "برای مشاهده تمام تراکنش‌ها از بخش گزارشات استفاده کنید.";
-        }
-    } else {
-        $message .= "📭 هیچ تراکنشی یافت نشد.\n";
-        $message .= "اولین تراکنش شما می‌تواند شارژ کیف پول یا خرید اشتراک باشد.";
-    }
-
-    $keyboard = [
-        'inline_keyboard' => [
-            [
-                ['text' => '📥 شارژ کیف پول', 'callback_data' => 'charge_wallet'],
-                ['text' => '💎 خرید اشتراک', 'callback_data' => 'buy_subscription']
-            ],
-            [
-                ['text' => '🔄 بروزرسانی', 'callback_data' => 'refresh_transactions'],
-                ['text' => '🔙 بازگشت', 'callback_data' => 'back_to_wallet']
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => '📥 شارژ کیف پول', 'callback_data' => 'charge_wallet'],
+                    ['text' => '💎 خرید اشتراک', 'callback_data' => 'buy_subscription']
+                ],
+                [
+                    ['text' => '🔄 بروزرسانی', 'callback_data' => 'refresh_transactions'],
+                    ['text' => '🔙 بازگشت', 'callback_data' => 'back_to_wallet']
+                ]
             ]
-        ]
-    ];
+        ];
 
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+    }
 
-// متد کمکی برای وضعیت تراکنش‌ها (اختیاری)
-private function getTransactionStatusText($status)
-{
-    $statuses = [
-        'pending' => '⏳ در انتظار',
-        'completed' => '✅ تکمیل شده',
-        'failed' => '❌ ناموفق',
-        'cancelled' => '🚫 لغو شده'
-    ];
-    
-    return $statuses[$status] ?? $status;
-}
-// ✅ اضافه کردن این متد برای ایموجی تراکنش‌ها
-private function getTransactionEmoji($type)
-{
-    $emojis = [
-        'charge' => '💵',
-        'purchase' => '📞',
-        'referral_bonus' => '🎁',
-        'withdraw' => '🏦',
-        'subscription_purchase' => '💎' // برای خرید اشتراک
-    ];
-    
-    return $emojis[$type] ?? '💰';
-}
+    // متد کمکی برای وضعیت تراکنش‌ها (اختیاری)
+    private function getTransactionStatusText($status)
+    {
+        $statuses = [
+            'pending' => '⏳ در انتظار',
+            'completed' => '✅ تکمیل شده',
+            'failed' => '❌ ناموفق',
+            'cancelled' => '🚫 لغو شده'
+        ];
+
+        return $statuses[$status] ?? $status;
+    }
+    // ✅ اضافه کردن این متد برای ایموجی تراکنش‌ها
+    private function getTransactionEmoji($type)
+    {
+        $emojis = [
+            'charge' => '💵',
+            'purchase' => '📞',
+            'referral_bonus' => '🎁',
+            'withdraw' => '🏦',
+            'subscription_purchase' => '💎' // برای خرید اشتراک
+        ];
+
+        return $emojis[$type] ?? '💰';
+    }
     private function handleChargeCodeInput($text, $user, $chatId)
     {
         $code = strtoupper(trim($text));
@@ -2484,18 +2548,18 @@ private function getTransactionEmoji($type)
         $this->telegram->sendMessage($chatId, $message, $keyboard);
     }
 
-   private function getTransactionTypeText($type)
-{
-    $types = [
-        'charge' => 'شارژ کیف پول',
-        'purchase' => 'دریافت اطلاعات تماس',
-        'referral_bonus' => '🎁 پاداش دعوت',
-        'withdraw' => 'برداشت',
-        'subscription_purchase' => 'خرید اشتراک' // ✅ جدید
-    ];
+    private function getTransactionTypeText($type)
+    {
+        $types = [
+            'charge' => 'شارژ کیف پول',
+            'purchase' => 'دریافت اطلاعات تماس',
+            'referral_bonus' => '🎁 پاداش دعوت',
+            'withdraw' => 'برداشت',
+            'subscription_purchase' => 'خرید اشتراک' // ✅ جدید
+        ];
 
-    return $types[$type] ?? $type;
-}
+        return $types[$type] ?? $type;
+    }
     private function getCities()
     {
         try {
@@ -2739,12 +2803,12 @@ private function getTransactionEmoji($type)
     }
     private function setFilterValue($user, $chatId, $fieldName, $value)
     {
-        
-    // 🔴 DECODE کردن مقدار قبل از استفاده
-    $decodedValue = urldecode($value);
-        
+
+        // 🔴 DECODE کردن مقدار قبل از استفاده
+        $decodedValue = urldecode($value);
+
         error_log("🔵 setFilterValue called - Field: {$fieldName}, Value: {$value}, User: {$user->id}");
-   
+
         // دریافت فیلترهای فعلی
         $userFilters = UserFilter::getFilters($user->id);
         error_log("🔵 Current filters before update: " . json_encode($userFilters));
@@ -3003,7 +3067,6 @@ private function getTransactionEmoji($type)
                 $keyboard['inline_keyboard'][] = [
                     ['text' => '🔙 بازگشت', 'callback_data' => 'edit_filters']
                 ];
-
             } else {
                 // حالت عادی برای سایر فیلترهای select (مثل جنسیت)
                 $message .= "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:\n\n";
@@ -3100,7 +3163,7 @@ private function getTransactionEmoji($type)
         foreach ($userFilters as $fieldName => $value) {
             if (!empty($value)) {
                 $filterLabel = $this->getFilterLabel($fieldName);
-                
+
 
                 if ($fieldName === 'city' && is_array($value)) {
                     // 🔴 نمایش ویژه برای شهرهای چندگانه
@@ -3177,7 +3240,7 @@ private function getTransactionEmoji($type)
     }
     private function handleEditFilters($user, $chatId)
     {
-          
+
         $userFilters = UserFilter::getFilters($user->id);
 
         // اگر کاربر فیلتری ندارد، فیلترهای پیش‌فرض ایجاد کنید
@@ -3294,7 +3357,6 @@ private function getTransactionEmoji($type)
             ]);
 
             $this->telegram->sendMessage($chatId, "✅ کاربر با آیدی {$newAdminId} به عنوان مدیر اضافه شد");
-
         } catch (Exception $e) {
             $this->telegram->sendMessage($chatId, "❌ خطا در افزودن مدیر: " . $e->getMessage());
         }
@@ -3392,7 +3454,6 @@ private function getTransactionEmoji($type)
             } else {
                 $this->telegram->sendMessage($chatId, "❌ خطا در تغییر وضعیت فیلد");
             }
-
         } catch (\Exception $e) {
             error_log("❌ Error in adminToggleField: " . $e->getMessage());
             $this->telegram->sendMessage($chatId, "❌ خطا در تغییر وضعیت فیلد: " . $e->getMessage());
@@ -3427,7 +3488,7 @@ private function getTransactionEmoji($type)
 
         $this->telegram->sendMessage($chatId, $message, $keyboard);
     }
-    
+
     private function adminAddFieldStep1($user, $chatId, $fieldType)
     {
         // ایجاد داده‌های جدید
@@ -3633,7 +3694,6 @@ private function getTransactionEmoji($type)
             ];
 
             $this->telegram->sendMessage($chatId, $message, $keyboard);
-
         } catch (\Exception $e) {
             error_log("❌ خطا در ایجاد فیلد: " . $e->getMessage());
 
@@ -3689,430 +3749,428 @@ private function getTransactionEmoji($type)
     }
 
     private function handleGetSuggestion($user, $chatId)
-{
-    error_log("🎯 handleGetSuggestion START - User: {$user->id}, Profile Completed: " . ($user->is_profile_completed ? 'YES' : 'NO'));
+    {
+        error_log("🎯 handleGetSuggestion START - User: {$user->id}, Profile Completed: " . ($user->is_profile_completed ? 'YES' : 'NO'));
 
-    // 1. چک کردن فعال بودن حساب کاربر درخواست‌کننده
-    if (!$user->is_active) {
-        $message = "⏸️ **حساب شما غیرفعال است!**\n\n";
-        $message .= "در حال حاضر نمی‌توانید پیشنهاد دریافت کنید.\n\n";
-        $message .= "📝 برای فعال‌سازی حساب، از منوی اصلی گزینه '▶️ فعال‌سازی حساب' را انتخاب کنید.";
-        
-        $keyboard = [
-            ['▶️ فعال‌سازی حساب'],
-            ['🔙 بازگشت به منوی اصلی']
-        ];
-        
-        $this->sendMessage($chatId, $message, $keyboard);
-        return;
-    }
-    
-    // 2. چک کردن تکمیل بودن پروفایل کاربر درخواست‌کننده
-    if (!$user->is_profile_completed) {
-        $message = "❌ **برای دریافت پیشنهاد باید پروفایل شما تکمیل باشد!**\n\n";
+        // 1. چک کردن فعال بودن حساب کاربر درخواست‌کننده
+        if (!$user->is_active) {
+            $message = "⏸️ **حساب شما غیرفعال است!**\n\n";
+            $message .= "در حال حاضر نمی‌توانید پیشنهاد دریافت کنید.\n\n";
+            $message .= "📝 برای فعال‌سازی حساب، از منوی اصلی گزینه '▶️ فعال‌سازی حساب' را انتخاب کنید.";
 
-        $missingFields = $this->getMissingRequiredFields($user);
-        if (!empty($missingFields)) {
-            $message .= "🔴 فیلدهای اجباری زیر تکمیل نشده‌اند:\n";
-            foreach ($missingFields as $field) {
-                $message .= "• {$field->field_label}\n";
-            }
-            $message .= "\n";
-        }
+            $keyboard = [
+                ['▶️ فعال‌سازی حساب'],
+                ['🔙 بازگشت به منوی اصلی']
+            ];
 
-        $completionPercent = $this->calculateProfileCompletion($user);
-        $message .= "📊 میزان تکمیل پروفایل: {$completionPercent}%\n\n";
-        $message .= "لطفاً ابتدا پروفایل خود را از منوی زیر تکمیل کنید:";
-
-        $keyboard = [
-            'inline_keyboard' => [
-                [
-                    ['text' => '📝 تکمیل پروفایل', 'callback_data' => 'profile_edit_start'],
-                    ['text' => '📊 وضعیت پروفایل', 'callback_data' => 'profile_status']
-                ],
-                [
-                    ['text' => '🔙 بازگشت', 'callback_data' => 'main_menu']
-                ]
-            ]
-        ];
-
-        $this->telegram->sendMessage($chatId, $message, $keyboard);
-        return;
-    }
-
-    // 🔴 **3. بررسی اشتراک فعال کاربر درخواست‌کننده (برای سهمیه پیشنهاد)**
-    // 🔴 **تغییر اصلی: استفاده از getActiveSubscription به جای hasActiveSubscription**
-    $subscription = $user->getActiveSubscription();
-    
-    if (!$subscription) {
-        $message = "❌ **برای دریافت پیشنهاد نیاز به اشتراک فعال دارید!**\n\n";
-        $message .= "💎 با خرید اشتراک می‌توانید:\n";
-        $message .= "• پیشنهادات نامحدود دریافت کنید\n";
-        $message .= "• اطلاعات تماس کاربران را مشاهده کنید\n";
-        $message .= "• از امکانات ویژه ربات استفاده کنید\n\n";
-        $message .= "📋 برای مشاهده پلن‌های اشتراک، از منوی اصلی گزینه '💎 اشتراک من' را انتخاب کنید.";
-        
-        $this->telegram->sendMessage($chatId, $message);
-        return;
-    }
-    
-    // 🔴 **4. بررسی فعال بودن اشتراک**
-    if (!$subscription->isActive()) {
-        $message = "❌ **اشتراک شما فعال نیست!**\n\n";
-        $message .= "⏰ تاریخ انقضا: " . $subscription->expiry_date . "\n";
-        $message .= "📋 برای تمدید اشتراک، از منوی اصلی گزینه '💎 اشتراک من' را انتخاب کنید.";
-        
-        $this->telegram->sendMessage($chatId, $message);
-        return;
-    }
-
-    // 🔴 **5. بررسی سهمیه پیشنهادات کاربر درخواست‌کننده**
-    if (!$subscription->canViewSuggestion()) {
-        $stats = $subscription->getUsageStats();
-        
-        $message = "❌ **سهمیه پیشنهادات شما تمام شده!**\n\n";
-        $message .= "📊 **سهمیه روزانه:**\n";
-        $message .= "• استفاده شده: {$stats['daily_suggestions']['used']} از {$stats['daily_suggestions']['total']}\n";
-        $message .= "• باقی‌مانده: {$stats['daily_suggestions']['remaining']}\n\n";
-        $message .= "📊 **سهمیه کلی:**\n";
-        $message .= "• استفاده شده: {$stats['total_suggestions']['used']} از {$stats['total_suggestions']['total']}\n";
-        $message .= "• باقی‌مانده: {$stats['total_suggestions']['remaining']}\n\n";
-        $message .= "⏰ سهمیه روزانه هر 24 ساعت شارژ می‌شود.\n";
-        $message .= "🔄 برای افزایش سهمیه، می‌توانید اشتراک خود را ارتقا دهید.";
-        
-        $this->telegram->sendMessage($chatId, $message);
-        return;
-    }
-
-    error_log("🎯 درخواست پیشنهاد برای کاربر: {$user->id} - {$user->first_name}");
-    
-    // 🔴 **استفاده از سهمیه**
-    if (!$subscription->useSuggestionView()) {
-        $this->telegram->sendMessage($chatId, "❌ خطا در استفاده از سهمیه پیشنهادات!");
-        return;
-    }
-
-    // دریافت فیلترهای کاربر
-    $userFilters = UserFilter::getFilters($user->id);
-    error_log("📋 فیلترهای کاربر: " . json_encode($userFilters));
-    error_log("🔍 Calling findSuggestionWithFilters...");
-    
-    // پیدا کردن پیشنهاد
-    $suggestedUser = $this->findSuggestionWithFilters($user, $userFilters);
-    
-    // 🔴 **دیباگ: بررسی نوع suggestedUser**
-    if ($suggestedUser) {
-        error_log("📊 Suggested user type: " . gettype($suggestedUser));
-        error_log("📊 Suggested user class: " . get_class($suggestedUser));
-        error_log("📊 Suggested user ID: " . ($suggestedUser->id ?? 'null'));
-        error_log("📊 Is User instance? " . ($suggestedUser instanceof \App\Models\User ? 'YES' : 'NO'));
-    } else {
-        error_log("📊 Suggested user is NULL");
-    }
-    
-    if (!$suggestedUser) {
-        $message = "😔 **در حال حاضر کاربر مناسبی برای نمایش پیدا نشد!**\n\n";
-
-        // نمایش فیلترهای فعال
-        $activeFilters = [];
-        foreach ($userFilters as $field => $value) {
-            if (!empty($value)) {
-                $fieldLabel = $this->getFilterLabel($field);
-
-                if ($field === 'city' && is_array($value) && !empty($value)) {
-                    $activeFilters[] = "**{$fieldLabel}**: " . implode(', ', $value);
-                } else if ($value !== '') {
-                    $activeFilters[] = "**{$fieldLabel}**: {$value}";
-                }
-            }
-        }
-
-        if (!empty($activeFilters)) {
-            $message .= "🔍 **فیلترهای فعال شما:**\n";
-            $message .= implode("\n", $activeFilters) . "\n\n";
-        }
-
-        $message .= "⚠️ **دلایل ممکن:**\n";
-        $message .= "• کاربران با مشخصات مورد نظر شما در سیستم موجود نیستند\n";
-        $message .= "• همه کاربران مناسب قبلاً به شما نمایش داده شده‌اند\n";
-        $message .= "• ممکن است نیاز باشد فیلترهای خود را گسترده‌تر کنید\n\n";
-
-        $message .= "💡 **راه‌حل‌ها:**\n";
-        $message .= "• فیلترهای خود را بازبینی کنید\n";
-        $message .= "• محدوده فیلترها را گسترده‌تر کنید\n";
-        $message .= "• برخی فیلترها را غیرفعال کنید\n";
-        $message .= "• چند ساعت دیگر مجدد تلاش کنید\n";
-
-        $keyboard = [
-            'inline_keyboard' => [
-                [
-                    ['text' => '⚙️ تغییر فیلترها', 'callback_data' => 'edit_filters'],
-                    ['text' => '🔄 بازنشانی فیلترها', 'callback_data' => 'reset_filters']
-                ],
-                [
-                    ['text' => '🔍 دیباگ داده‌ها', 'callback_data' => 'debug_users'],
-                    ['text' => '🔧 دیباگ فیلترها', 'callback_data' => 'debug_filter_logic']
-                ],
-                [
-                    ['text' => '🔙 منوی اصلی', 'callback_data' => 'main_menu']
-                ]
-            ]
-        ];
-
-        $this->telegram->sendMessage($chatId, $message, $keyboard);
-        return;
-    }
-
-    // 🔴 **تبدیل suggestedUser به مدل User اگر stdClass است**
-    if ($suggestedUser instanceof \stdClass) {
-        error_log("⚠️ Suggested user is stdClass, converting to User model...");
-        
-        $userId = $suggestedUser->id ?? $suggestedUser->ID ?? null;
-        
-        if ($userId) {
-            // بارگذاری از دیتابیس
-            $suggestedUser = \App\Models\User::find($userId);
-            if (!$suggestedUser) {
-                $this->telegram->sendMessage($chatId, "❌ کاربر مورد نظر در سیستم یافت نشد.");
-                return;
-            }
-        } else {
-            $this->telegram->sendMessage($chatId, "❌ اطلاعات کاربر ناقص است.");
+            $this->sendMessage($chatId, $message, $keyboard);
             return;
         }
-    }
-    
-    // 🔴 **بررسی نهایی که suggestedUser یک مدل User است**
-    if (!($suggestedUser instanceof \App\Models\User)) {
-        error_log("❌ Suggested user is not a User model: " . gettype($suggestedUser));
-        $this->telegram->sendMessage($chatId, "❌ خطا در بارگذاری اطلاعات کاربر.");
-        return;
-    }
 
-    // 🔴 **6. نمایش پیشنهاد به کاربر**
-    $this->showSuggestion($user, $chatId, $suggestedUser);
-}
-    private function findSuggestionWithFilters($user, $userFilters)
-{
-    PerformanceMonitor::start('total_request');
-    error_log("🎯 **شروع findSuggestionWithFilters** - کاربر: {$user->id}");
+        // 2. چک کردن تکمیل بودن پروفایل کاربر درخواست‌کننده
+        if (!$user->is_profile_completed) {
+            $message = "❌ **برای دریافت پیشنهاد باید پروفایل شما تکمیل باشد!**\n\n";
 
-    // ابتدا فایلترها رو بررسی کن
-    error_log("📋 فیلترهای کاربر: " . json_encode($userFilters));
+            $missingFields = $this->getMissingRequiredFields($user);
+            if (!empty($missingFields)) {
+                $message .= "🔴 فیلدهای اجباری زیر تکمیل نشده‌اند:\n";
+                foreach ($missingFields as $field) {
+                    $message .= "• {$field->field_label}\n";
+                }
+                $message .= "\n";
+            }
 
-    $hasActiveFilters = $this->hasActiveFilters($userFilters);
-    error_log("🔍 فیلتر فعال وجود دارد: " . ($hasActiveFilters ? "بله" : "خیر"));
+            $completionPercent = $this->calculateProfileCompletion($user);
+            $message .= "📊 میزان تکمیل پروفایل: {$completionPercent}%\n\n";
+            $message .= "لطفاً ابتدا پروفایل خود را از منوی زیر تکمیل کنید:";
 
-    // کاربرانی که قبلاً نمایش داده شده‌اند
-    $excludedUsers = \App\Models\UserSuggestion::getAlreadyShownUsers($user->id);
-    $excludedUsers[] = $user->id;
+            $keyboard = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => '📝 تکمیل پروفایل', 'callback_data' => 'profile_edit_start'],
+                        ['text' => '📊 وضعیت پروفایل', 'callback_data' => 'profile_status']
+                    ],
+                    [
+                        ['text' => '🔙 بازگشت', 'callback_data' => 'main_menu']
+                    ]
+                ]
+            ];
 
-    $suitableUsers = [];
-
-    if ($hasActiveFilters) {
-        error_log("🔍 استفاده از منطق فیلترهای کاربر");
-        $suitableUsers = $this->findSuitableUsersWithFilters($user, $userFilters, $excludedUsers);
-        error_log("🔍 کاربران یافت شده با فیلتر: " . count($suitableUsers));
-
-        // 🔴 تغییر مهم: اگر با فیلترها کاربری پیدا نشد، null برگردان - به منطق پیشفرض نرو!
-        if (empty($suitableUsers)) {
-            error_log("❌ هیچ کاربری با فیلترها یافت نشد - بازگشت null");
-            PerformanceMonitor::start('total_request');
-            return null;
+            $this->telegram->sendMessage($chatId, $message, $keyboard);
+            return;
         }
-        
-        // 🔴 **اگر findSuitableUsersWithFilters از PDO استفاده می‌کند، باید نتایج را به User تبدیل کنیم**
-        $suitableUsers = $this->convertResultsToUserModels($suitableUsers);
-        
-    } else {
-        error_log("🔍 استفاده از منطق پیشفرض (بدون فیلتر فعال)");
-        $suitableUsers = $this->findSuggestionWithDefaultLogic($user, true);
-        // این متد حالا آرایه‌ای از اشیاء User برمی‌گرداند
-    }
-    
-    // 🔴 **مطمئن شویم که همه عناصر آرایه User هستند**
-    $suitableUsers = array_filter($suitableUsers, function($item) {
-        return $item instanceof \App\Models\User;
-    });
 
-    // 🔴 فیلتر کردن کاربران غیرفعال
-    $suitableUsers = array_filter($suitableUsers, function($suggestedUser) {
-        return $suggestedUser->is_active == 1;
-    });
+        // 🔴 **3. بررسی اشتراک فعال کاربر درخواست‌کننده (برای سهمیه پیشنهاد)**
+        // 🔴 **تغییر اصلی: استفاده از getActiveSubscription به جای hasActiveSubscription**
+        $subscription = $user->getActiveSubscription();
 
-    error_log("🔍 مجموع کاربران مناسب (پس از فیلتر): " . count($suitableUsers));
+        if (!$subscription) {
+            $message = "❌ **برای دریافت پیشنهاد نیاز به اشتراک فعال دارید!**\n\n";
+            $message .= "💎 با خرید اشتراک می‌توانید:\n";
+            $message .= "• پیشنهادات نامحدود دریافت کنید\n";
+            $message .= "• اطلاعات تماس کاربران را مشاهده کنید\n";
+            $message .= "• از امکانات ویژه ربات استفاده کنید\n\n";
+            $message .= "📋 برای مشاهده پلن‌های اشتراک، از منوی اصلی گزینه '💎 اشتراک من' را انتخاب کنید.";
 
-    if (empty($suitableUsers)) {
-        error_log("❌ هیچ کاربر مناسبی در سیستم وجود ندارد");
-        return null;
-    }
+            $this->telegram->sendMessage($chatId, $message);
+            return;
+        }
 
-    // انتخاب تصادفی یک کاربر
-    $randomIndex = array_rand($suitableUsers);
-    $suggestedUser = $suitableUsers[$randomIndex];
+        // 🔴 **4. بررسی فعال بودن اشتراک**
+        if (!$subscription->isActive()) {
+            $message = "❌ **اشتراک شما فعال نیست!**\n\n";
+            $message .= "⏰ تاریخ انقضا: " . $subscription->expiry_date . "\n";
+            $message .= "📋 برای تمدید اشتراک، از منوی اصلی گزینه '💎 اشتراک من' را انتخاب کنید.";
 
-    // ثبت در تاریخچه
-    \App\Models\UserSuggestion::create($user->id, $suggestedUser->id);
+            $this->telegram->sendMessage($chatId, $message);
+            return;
+        }
 
-    error_log("✅ کاربر انتخاب شده: {$suggestedUser->id} - {$suggestedUser->first_name}");
-    error_log("✅ جنسیت کاربر انتخاب شده: {$suggestedUser->gender}");
-    error_log("✅ شهر کاربر انتخاب شده: {$suggestedUser->city}");
+        // 🔴 **5. بررسی سهمیه پیشنهادات کاربر درخواست‌کننده**
+        if (!$subscription->canViewSuggestion()) {
+            $stats = $subscription->getUsageStats();
 
-    PerformanceMonitor::start('total_request');
-    return $suggestedUser;
-}
+            $message = "❌ **سهمیه پیشنهادات شما تمام شده!**\n\n";
+            $message .= "📊 **سهمیه روزانه:**\n";
+            $message .= "• استفاده شده: {$stats['daily_suggestions']['used']} از {$stats['daily_suggestions']['total']}\n";
+            $message .= "• باقی‌مانده: {$stats['daily_suggestions']['remaining']}\n\n";
+            $message .= "📊 **سهمیه کلی:**\n";
+            $message .= "• استفاده شده: {$stats['total_suggestions']['used']} از {$stats['total_suggestions']['total']}\n";
+            $message .= "• باقی‌مانده: {$stats['total_suggestions']['remaining']}\n\n";
+            $message .= "⏰ سهمیه روزانه هر 24 ساعت شارژ می‌شود.\n";
+            $message .= "🔄 برای افزایش سهمیه، می‌توانید اشتراک خود را ارتقا دهید.";
 
-// 🔴 **اضافه کردن این متد برای تبدیل نتایج PDO به مدل User**
-private function convertResultsToUserModels($results)
-{
-    $userModels = [];
-    
-    foreach ($results as $result) {
-        if ($result instanceof \App\Models\User) {
-            $userModels[] = $result;
-        } elseif ($result instanceof \stdClass || is_array($result)) {
-            // تبدیل به آرایه
-            $data = (array)$result;
-            
-            // پیدا کردن ID
-            $userId = $data['id'] ?? $data['ID'] ?? null;
-            
+            $this->telegram->sendMessage($chatId, $message);
+            return;
+        }
+
+        error_log("🎯 درخواست پیشنهاد برای کاربر: {$user->id} - {$user->first_name}");
+
+        // 🔴 **استفاده از سهمیه**
+        if (!$subscription->useSuggestionView()) {
+            $this->telegram->sendMessage($chatId, "❌ خطا در استفاده از سهمیه پیشنهادات!");
+            return;
+        }
+
+        // دریافت فیلترهای کاربر
+        $userFilters = UserFilter::getFilters($user->id);
+        error_log("📋 فیلترهای کاربر: " . json_encode($userFilters));
+        error_log("🔍 Calling findSuggestionWithFilters...");
+
+        // پیدا کردن پیشنهاد
+        $suggestedUser = $this->findSuggestionWithFilters($user, $userFilters);
+
+        // 🔴 **دیباگ: بررسی نوع suggestedUser**
+        if ($suggestedUser) {
+            error_log("📊 Suggested user type: " . gettype($suggestedUser));
+            error_log("📊 Suggested user class: " . get_class($suggestedUser));
+            error_log("📊 Suggested user ID: " . ($suggestedUser->id ?? 'null'));
+            error_log("📊 Is User instance? " . ($suggestedUser instanceof \App\Models\User ? 'YES' : 'NO'));
+        } else {
+            error_log("📊 Suggested user is NULL");
+        }
+
+        if (!$suggestedUser) {
+            $message = "😔 **در حال حاضر کاربر مناسبی برای نمایش پیدا نشد!**\n\n";
+
+            // نمایش فیلترهای فعال
+            $activeFilters = [];
+            foreach ($userFilters as $field => $value) {
+                if (!empty($value)) {
+                    $fieldLabel = $this->getFilterLabel($field);
+
+                    if ($field === 'city' && is_array($value) && !empty($value)) {
+                        $activeFilters[] = "**{$fieldLabel}**: " . implode(', ', $value);
+                    } else if ($value !== '') {
+                        $activeFilters[] = "**{$fieldLabel}**: {$value}";
+                    }
+                }
+            }
+
+            if (!empty($activeFilters)) {
+                $message .= "🔍 **فیلترهای فعال شما:**\n";
+                $message .= implode("\n", $activeFilters) . "\n\n";
+            }
+
+            $message .= "⚠️ **دلایل ممکن:**\n";
+            $message .= "• کاربران با مشخصات مورد نظر شما در سیستم موجود نیستند\n";
+            $message .= "• همه کاربران مناسب قبلاً به شما نمایش داده شده‌اند\n";
+            $message .= "• ممکن است نیاز باشد فیلترهای خود را گسترده‌تر کنید\n\n";
+
+            $message .= "💡 **راه‌حل‌ها:**\n";
+            $message .= "• فیلترهای خود را بازبینی کنید\n";
+            $message .= "• محدوده فیلترها را گسترده‌تر کنید\n";
+            $message .= "• برخی فیلترها را غیرفعال کنید\n";
+            $message .= "• چند ساعت دیگر مجدد تلاش کنید\n";
+
+            $keyboard = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => '⚙️ تغییر فیلترها', 'callback_data' => 'edit_filters'],
+                        ['text' => '🔄 بازنشانی فیلترها', 'callback_data' => 'reset_filters']
+                    ],
+                    [
+                        ['text' => '🔍 دیباگ داده‌ها', 'callback_data' => 'debug_users'],
+                        ['text' => '🔧 دیباگ فیلترها', 'callback_data' => 'debug_filter_logic']
+                    ],
+                    [
+                        ['text' => '🔙 منوی اصلی', 'callback_data' => 'main_menu']
+                    ]
+                ]
+            ];
+
+            $this->telegram->sendMessage($chatId, $message, $keyboard);
+            return;
+        }
+
+        // 🔴 **تبدیل suggestedUser به مدل User اگر stdClass است**
+        if ($suggestedUser instanceof \stdClass) {
+            error_log("⚠️ Suggested user is stdClass, converting to User model...");
+
+            $userId = $suggestedUser->id ?? $suggestedUser->ID ?? null;
+
             if ($userId) {
                 // بارگذاری از دیتابیس
-                $user = \App\Models\User::find($userId);
-                if ($user) {
-                    $userModels[] = $user;
-                } else {
-                    // اگر پیدا نشد، از داده‌های موجود ایجاد کنید
-                    $user = new \App\Models\User();
-                    foreach ($data as $key => $value) {
-                        $user->$key = $value;
-                    }
-                    $userModels[] = $user;
+                $suggestedUser = \App\Models\User::find($userId);
+                if (!$suggestedUser) {
+                    $this->telegram->sendMessage($chatId, "❌ کاربر مورد نظر در سیستم یافت نشد.");
+                    return;
                 }
-            }
-        }
-    }
-    
-    return $userModels;
-}
-    private function findSuitableUsersWithFilters($user, $filters, $excludedUsers)
-{
-    PerformanceMonitor::start('filtered_search');
-    error_log("🎯 **شروع findSuitableUsersWithFilters (Eloquent)** - کاربر: {$user->id}");
-    error_log("📋 فیلترهای ورودی: " . json_encode($filters));
-
-    try {
-        // ساخت کوئری اصلی
-        $query = \App\Models\User::whereNotIn('id', $excludedUsers)
-            ->where('is_profile_completed', true)
-            ->where('is_active', true);
-        
-        error_log("🎯 **اجرای منطق AND بین فیلترها**");
-
-        // 🔴 فیلتر جنسیت - بهبود یافته
-        if (isset($filters['gender']) && !empty($filters['gender']) && $filters['gender'] !== '') {
-            $genderFilter = trim($filters['gender']);
-            error_log("🔵 پردازش فیلتر جنسیت: '{$genderFilter}'");
-
-            if ($genderFilter === 'زن') {
-                $query->where(function($q) {
-                    $q->where('gender', 'زن')
-                      ->orWhere('gender', 'female')
-                      ->orWhere('gender', '2')
-                      ->orWhere('gender', 'F')
-                      ->orWhere('gender', 'خانم');
-                });
-                error_log("✅ فیلتر جنسیت (زن) اعمال شد");
-            } elseif ($genderFilter === 'مرد') {
-                $query->where(function($q) {
-                    $q->where('gender', 'مرد')
-                      ->orWhere('gender', 'male')
-                      ->orWhere('gender', '1')
-                      ->orWhere('gender', 'M')
-                      ->orWhere('gender', 'آقا');
-                });
-                error_log("✅ فیلتر جنسیت (مرد) اعمال شد");
             } else {
-                error_log("⚠️ جنسیت نامعتبر: '{$genderFilter}'");
-            }
-        } else {
-            error_log("⚪ فیلتر جنسیت: خالی یا تنظیم نشده");
-        }
-
-        // 🔴 فیلتر شهر
-        if (isset($filters['city']) && !empty($filters['city'])) {
-            if (is_array($filters['city']) && !empty($filters['city'])) {
-                $cityList = array_filter($filters['city']);
-                if (!empty($cityList)) {
-                    $query->whereIn('city', $cityList);
-                    error_log("✅ فیلتر شهر اعمال شد (چند شهری): " . implode(', ', $cityList));
-                }
-            } elseif (!is_array($filters['city']) && $filters['city'] !== '') {
-                $query->where('city', $filters['city']);
-                error_log("✅ فیلتر شهر اعمال شد (تک شهری): {$filters['city']}");
-            }
-        } else {
-            error_log("⚪ فیلتر شهر: خالی یا تنظیم نشده");
-        }
-
-        // 🔴 فیلتر سن - اصلاح شده برای استفاده از birth_date
-        $hasAgeFilter = false;
-        
-        if (isset($filters['min_age']) && !empty($filters['min_age']) && is_numeric($filters['min_age'])) {
-            $minAge = intval($filters['min_age']);
-            if ($minAge > 0) {
-                $maxBirthDate = Carbon::now()->subYears($minAge)->format('Y-m-d');
-                $query->whereDate('birth_date', '<=', $maxBirthDate);
-                $hasAgeFilter = true;
-                error_log("✅ فیلتر حداقل سن اعمال شد: {$minAge} سال (تاریخ تولد <= {$maxBirthDate})");
+                $this->telegram->sendMessage($chatId, "❌ اطلاعات کاربر ناقص است.");
+                return;
             }
         }
 
-        if (isset($filters['max_age']) && !empty($filters['max_age']) && is_numeric($filters['max_age'])) {
-            $maxAge = intval($filters['max_age']);
-            if ($maxAge > 0) {
-                $minBirthDate = Carbon::now()->subYears($maxAge + 1)->addDay()->format('Y-m-d');
-                $query->whereDate('birth_date', '>=', $minBirthDate);
-                $hasAgeFilter = true;
-                error_log("✅ فیلتر حداکثر سن اعمال شد: {$maxAge} سال (تاریخ تولد >= {$minBirthDate})");
-            }
+        // 🔴 **بررسی نهایی که suggestedUser یک مدل User است**
+        if (!($suggestedUser instanceof \App\Models\User)) {
+            error_log("❌ Suggested user is not a User model: " . gettype($suggestedUser));
+            $this->telegram->sendMessage($chatId, "❌ خطا در بارگذاری اطلاعات کاربر.");
+            return;
         }
 
-        // اگر فیلتر سن وجود ندارد، محدوده منطقی سنی اعمال کنید
-        if (!$hasAgeFilter) {
-            $minBirthDate = Carbon::now()->subYears(100)->format('Y-m-d');
-            $maxBirthDate = Carbon::now()->subYears(18)->format('Y-m-d');
-            $query->whereBetween('birth_date', [$minBirthDate, $maxBirthDate]);
-            error_log("🔵 محدوده سنی پیشفرض: 18 تا 100 سال");
-        }
-
-        // اجرای کوئری
-        $results = $query->inRandomOrder()->limit(50)->get();
-        
-        error_log("✅ تعداد کاربران یافت شده با Eloquent: " . count($results));
-
-        // 🔴 دیباگ دقیق نتایج
-        if (!empty($results)) {
-            error_log("👥 **نتایج فیلتر شده (Eloquent):**");
-            foreach ($results as $index => $resultUser) {
-                // محاسبه سن از birth_date
-                $age = $resultUser->birth_date ? Carbon::now()->diffInYears($resultUser->birth_date) : 'نامشخص';
-                
-                $genderDisplay = $this->convertGenderForDisplay($resultUser->gender);
-                error_log("   {$index}. {$resultUser->first_name} - جنسیت:{$resultUser->gender} ({$genderDisplay}) - شهر:{$resultUser->city} - سن:{$age}");
-            }
-        }
-
-        PerformanceMonitor::start('filtered_search');
-        return $results->all();
-
-    } catch (\Exception $e) {
-        error_log("❌ خطا در findSuitableUsersWithFilters (Eloquent): " . $e->getMessage());
-        error_log("❌ Stack trace: " . $e->getTraceAsString());
-        return [];
+        // 🔴 **6. نمایش پیشنهاد به کاربر**
+        $this->showSuggestion($user, $chatId, $suggestedUser);
     }
-}
+    private function findSuggestionWithFilters($user, $userFilters)
+    {
+        PerformanceMonitor::start('total_request');
+        error_log("🎯 **شروع findSuggestionWithFilters** - کاربر: {$user->id}");
+
+        // ابتدا فایلترها رو بررسی کن
+        error_log("📋 فیلترهای کاربر: " . json_encode($userFilters));
+
+        $hasActiveFilters = $this->hasActiveFilters($userFilters);
+        error_log("🔍 فیلتر فعال وجود دارد: " . ($hasActiveFilters ? "بله" : "خیر"));
+
+        // کاربرانی که قبلاً نمایش داده شده‌اند
+        $excludedUsers = \App\Models\UserSuggestion::getAlreadyShownUsers($user->id);
+        $excludedUsers[] = $user->id;
+
+        $suitableUsers = [];
+
+        if ($hasActiveFilters) {
+            error_log("🔍 استفاده از منطق فیلترهای کاربر");
+            $suitableUsers = $this->findSuitableUsersWithFilters($user, $userFilters, $excludedUsers);
+            error_log("🔍 کاربران یافت شده با فیلتر: " . count($suitableUsers));
+
+            // 🔴 تغییر مهم: اگر با فیلترها کاربری پیدا نشد، null برگردان - به منطق پیشفرض نرو!
+            if (empty($suitableUsers)) {
+                error_log("❌ هیچ کاربری با فیلترها یافت نشد - بازگشت null");
+                PerformanceMonitor::start('total_request');
+                return null;
+            }
+
+            // 🔴 **اگر findSuitableUsersWithFilters از PDO استفاده می‌کند، باید نتایج را به User تبدیل کنیم**
+            $suitableUsers = $this->convertResultsToUserModels($suitableUsers);
+        } else {
+            error_log("🔍 استفاده از منطق پیشفرض (بدون فیلتر فعال)");
+            $suitableUsers = $this->findSuggestionWithDefaultLogic($user, true);
+            // این متد حالا آرایه‌ای از اشیاء User برمی‌گرداند
+        }
+
+        // 🔴 **مطمئن شویم که همه عناصر آرایه User هستند**
+        $suitableUsers = array_filter($suitableUsers, function ($item) {
+            return $item instanceof \App\Models\User;
+        });
+
+        // 🔴 فیلتر کردن کاربران غیرفعال
+        $suitableUsers = array_filter($suitableUsers, function ($suggestedUser) {
+            return $suggestedUser->is_active == 1;
+        });
+
+        error_log("🔍 مجموع کاربران مناسب (پس از فیلتر): " . count($suitableUsers));
+
+        if (empty($suitableUsers)) {
+            error_log("❌ هیچ کاربر مناسبی در سیستم وجود ندارد");
+            return null;
+        }
+
+        // انتخاب تصادفی یک کاربر
+        $randomIndex = array_rand($suitableUsers);
+        $suggestedUser = $suitableUsers[$randomIndex];
+
+        // ثبت در تاریخچه
+        \App\Models\UserSuggestion::create($user->id, $suggestedUser->id);
+
+        error_log("✅ کاربر انتخاب شده: {$suggestedUser->id} - {$suggestedUser->first_name}");
+        error_log("✅ جنسیت کاربر انتخاب شده: {$suggestedUser->gender}");
+        error_log("✅ شهر کاربر انتخاب شده: {$suggestedUser->city}");
+
+        PerformanceMonitor::start('total_request');
+        return $suggestedUser;
+    }
+
+    // 🔴 **اضافه کردن این متد برای تبدیل نتایج PDO به مدل User**
+    private function convertResultsToUserModels($results)
+    {
+        $userModels = [];
+
+        foreach ($results as $result) {
+            if ($result instanceof \App\Models\User) {
+                $userModels[] = $result;
+            } elseif ($result instanceof \stdClass || is_array($result)) {
+                // تبدیل به آرایه
+                $data = (array)$result;
+
+                // پیدا کردن ID
+                $userId = $data['id'] ?? $data['ID'] ?? null;
+
+                if ($userId) {
+                    // بارگذاری از دیتابیس
+                    $user = \App\Models\User::find($userId);
+                    if ($user) {
+                        $userModels[] = $user;
+                    } else {
+                        // اگر پیدا نشد، از داده‌های موجود ایجاد کنید
+                        $user = new \App\Models\User();
+                        foreach ($data as $key => $value) {
+                            $user->$key = $value;
+                        }
+                        $userModels[] = $user;
+                    }
+                }
+            }
+        }
+
+        return $userModels;
+    }
+    private function findSuitableUsersWithFilters($user, $filters, $excludedUsers)
+    {
+        PerformanceMonitor::start('filtered_search');
+        error_log("🎯 **شروع findSuitableUsersWithFilters (Eloquent)** - کاربر: {$user->id}");
+        error_log("📋 فیلترهای ورودی: " . json_encode($filters));
+
+        try {
+            // ساخت کوئری اصلی
+            $query = \App\Models\User::whereNotIn('id', $excludedUsers)
+                ->where('is_profile_completed', true)
+                ->where('is_active', true);
+
+            error_log("🎯 **اجرای منطق AND بین فیلترها**");
+
+            // 🔴 فیلتر جنسیت - بهبود یافته
+            if (isset($filters['gender']) && !empty($filters['gender']) && $filters['gender'] !== '') {
+                $genderFilter = trim($filters['gender']);
+                error_log("🔵 پردازش فیلتر جنسیت: '{$genderFilter}'");
+
+                if ($genderFilter === 'زن') {
+                    $query->where(function ($q) {
+                        $q->where('gender', 'زن')
+                            ->orWhere('gender', 'female')
+                            ->orWhere('gender', '2')
+                            ->orWhere('gender', 'F')
+                            ->orWhere('gender', 'خانم');
+                    });
+                    error_log("✅ فیلتر جنسیت (زن) اعمال شد");
+                } elseif ($genderFilter === 'مرد') {
+                    $query->where(function ($q) {
+                        $q->where('gender', 'مرد')
+                            ->orWhere('gender', 'male')
+                            ->orWhere('gender', '1')
+                            ->orWhere('gender', 'M')
+                            ->orWhere('gender', 'آقا');
+                    });
+                    error_log("✅ فیلتر جنسیت (مرد) اعمال شد");
+                } else {
+                    error_log("⚠️ جنسیت نامعتبر: '{$genderFilter}'");
+                }
+            } else {
+                error_log("⚪ فیلتر جنسیت: خالی یا تنظیم نشده");
+            }
+
+            // 🔴 فیلتر شهر
+            if (isset($filters['city']) && !empty($filters['city'])) {
+                if (is_array($filters['city']) && !empty($filters['city'])) {
+                    $cityList = array_filter($filters['city']);
+                    if (!empty($cityList)) {
+                        $query->whereIn('city', $cityList);
+                        error_log("✅ فیلتر شهر اعمال شد (چند شهری): " . implode(', ', $cityList));
+                    }
+                } elseif (!is_array($filters['city']) && $filters['city'] !== '') {
+                    $query->where('city', $filters['city']);
+                    error_log("✅ فیلتر شهر اعمال شد (تک شهری): {$filters['city']}");
+                }
+            } else {
+                error_log("⚪ فیلتر شهر: خالی یا تنظیم نشده");
+            }
+
+            // 🔴 فیلتر سن - اصلاح شده برای استفاده از birth_date
+            $hasAgeFilter = false;
+
+            if (isset($filters['min_age']) && !empty($filters['min_age']) && is_numeric($filters['min_age'])) {
+                $minAge = intval($filters['min_age']);
+                if ($minAge > 0) {
+                    $maxBirthDate = Carbon::now()->subYears($minAge)->format('Y-m-d');
+                    $query->whereDate('birth_date', '<=', $maxBirthDate);
+                    $hasAgeFilter = true;
+                    error_log("✅ فیلتر حداقل سن اعمال شد: {$minAge} سال (تاریخ تولد <= {$maxBirthDate})");
+                }
+            }
+
+            if (isset($filters['max_age']) && !empty($filters['max_age']) && is_numeric($filters['max_age'])) {
+                $maxAge = intval($filters['max_age']);
+                if ($maxAge > 0) {
+                    $minBirthDate = Carbon::now()->subYears($maxAge + 1)->addDay()->format('Y-m-d');
+                    $query->whereDate('birth_date', '>=', $minBirthDate);
+                    $hasAgeFilter = true;
+                    error_log("✅ فیلتر حداکثر سن اعمال شد: {$maxAge} سال (تاریخ تولد >= {$minBirthDate})");
+                }
+            }
+
+            // اگر فیلتر سن وجود ندارد، محدوده منطقی سنی اعمال کنید
+            if (!$hasAgeFilter) {
+                $minBirthDate = Carbon::now()->subYears(100)->format('Y-m-d');
+                $maxBirthDate = Carbon::now()->subYears(18)->format('Y-m-d');
+                $query->whereBetween('birth_date', [$minBirthDate, $maxBirthDate]);
+                error_log("🔵 محدوده سنی پیشفرض: 18 تا 100 سال");
+            }
+
+            // اجرای کوئری
+            $results = $query->inRandomOrder()->limit(50)->get();
+
+            error_log("✅ تعداد کاربران یافت شده با Eloquent: " . count($results));
+
+            // 🔴 دیباگ دقیق نتایج
+            if (!empty($results)) {
+                error_log("👥 **نتایج فیلتر شده (Eloquent):**");
+                foreach ($results as $index => $resultUser) {
+                    // محاسبه سن از birth_date
+                    $age = $resultUser->birth_date ? Carbon::now()->diffInYears($resultUser->birth_date) : 'نامشخص';
+
+                    $genderDisplay = $this->convertGenderForDisplay($resultUser->gender);
+                    error_log("   {$index}. {$resultUser->first_name} - جنسیت:{$resultUser->gender} ({$genderDisplay}) - شهر:{$resultUser->city} - سن:{$age}");
+                }
+            }
+
+            PerformanceMonitor::start('filtered_search');
+            return $results->all();
+        } catch (\Exception $e) {
+            error_log("❌ خطا در findSuitableUsersWithFilters (Eloquent): " . $e->getMessage());
+            error_log("❌ Stack trace: " . $e->getTraceAsString());
+            return [];
+        }
+    }
     private function findSuggestion($user)
     {
         // کاربرانی که قبلاً بیش از 2 بار نمایش داده شده‌اند
@@ -4149,100 +4207,98 @@ private function convertResultsToUserModels($results)
         return $suggestedUser;
     }
     private function findSuggestionWithDefaultLogic($user, $returnArray = false)
-{
-    PerformanceMonitor::start('find_suggestion_default');
-    error_log("🔵 استفاده از منطق پیشفرض برای کاربر: {$user->id}");
+    {
+        PerformanceMonitor::start('find_suggestion_default');
+        error_log("🔵 استفاده از منطق پیشفرض برای کاربر: {$user->id}");
 
-    // کاربرانی که قبلاً نمایش داده شده‌اند
-    $excludedUsers = \App\Models\UserSuggestion::getAlreadyShownUsers($user->id);
-    $excludedUsers[] = $user->id;
+        // کاربرانی که قبلاً نمایش داده شده‌اند
+        $excludedUsers = \App\Models\UserSuggestion::getAlreadyShownUsers($user->id);
+        $excludedUsers[] = $user->id;
 
-    // اگر کاربر جنسیت خودش را تنظیم نکرده، همه کاربران کامل را نمایش بده
-    if (empty($user->gender)) {
-        error_log("🔵 کاربر جنسیت خود را تنظیم نکرده - نمایش همه کاربران کامل");
-        
-        // 🔴 **استفاده از Eloquent به جای PDO**
-        $query = \App\Models\User::whereNotIn('id', $excludedUsers)
-            ->where('is_profile_completed', true)
-            ->where('is_active', true)
-            ->inRandomOrder()
-            ->limit(50);
+        // اگر کاربر جنسیت خودش را تنظیم نکرده، همه کاربران کامل را نمایش بده
+        if (empty($user->gender)) {
+            error_log("🔵 کاربر جنسیت خود را تنظیم نکرده - نمایش همه کاربران کامل");
+
+            // 🔴 **استفاده از Eloquent به جای PDO**
+            $query = \App\Models\User::whereNotIn('id', $excludedUsers)
+                ->where('is_profile_completed', true)
+                ->where('is_active', true)
+                ->inRandomOrder()
+                ->limit(50);
+
+            try {
+                $results = $query->get();
+                error_log("🔵 تعداد کاربران یافت شده (بدون فیلتر جنسیت): " . count($results));
+
+                if ($returnArray) {
+                    return $results->all();
+                }
+
+                if ($results->isEmpty()) {
+                    return null;
+                }
+
+                $suggestedUser = $results->random();
+                \App\Models\UserSuggestion::create($user->id, $suggestedUser->id);
+
+                return $suggestedUser;
+            } catch (\Exception $e) {
+                error_log("❌ خطا در منطق پیشفرض بدون جنسیت: " . $e->getMessage());
+                return $returnArray ? [] : null;
+            }
+        }
+
+        // پیدا کردن کاربران با جنسیت مخالف و پروفایل کامل
+        $oppositeGender = $this->getOppositeGender($user->gender);
+
+        error_log("🔵 جنسیت کاربر: {$user->gender} -> جنسیت مخالف: {$oppositeGender}");
 
         try {
-            $results = $query->get();
-            error_log("🔵 تعداد کاربران یافت شده (بدون فیلتر جنسیت): " . count($results));
+            // 🔴 **استفاده از Eloquent به جای PDO**
+            $query = \App\Models\User::whereNotIn('id', $excludedUsers)
+                ->where('is_profile_completed', true)
+                ->where('is_active', true);
+
+            // 🔴 **شرایط جنسیت با LIKE**
+            $query->where(function ($q) use ($oppositeGender) {
+                $oppositeGenderEnglish = $this->getOppositeGenderEnglish($oppositeGender);
+                $oppositeGenderNumeric = $this->getOppositeGenderNumeric($oppositeGender);
+
+                $q->where('gender', $oppositeGender)
+                    ->orWhere('gender', $oppositeGenderEnglish)
+                    ->orWhere('gender', $oppositeGenderNumeric)
+                    ->orWhere('gender', 'like', "%{$oppositeGender}%")
+                    ->orWhere('gender', 'like', "%{$oppositeGenderEnglish}%");
+            });
+
+            $results = $query->inRandomOrder()->limit(50)->get();
+
+            error_log("🔵 تعداد کاربران یافت شده با منطق پیشفرض: " . count($results));
 
             if ($returnArray) {
+                PerformanceMonitor::start('find_suggestion_default');
                 return $results->all();
             }
 
             if ($results->isEmpty()) {
+                error_log("❌ هیچ کاربری با منطق پیشفرض یافت نشد");
                 return null;
             }
 
+            // انتخاب تصادفی یک کاربر
             $suggestedUser = $results->random();
+
+            // ثبت در تاریخچه
             \App\Models\UserSuggestion::create($user->id, $suggestedUser->id);
 
-            return $suggestedUser;
+            error_log("✅ کاربر انتخاب شده با منطق پیشفرض: {$suggestedUser->id} - {$suggestedUser->first_name}");
 
+            return $suggestedUser;
         } catch (\Exception $e) {
-            error_log("❌ خطا در منطق پیشفرض بدون جنسیت: " . $e->getMessage());
+            error_log("❌ خطا در منطق پیشفرض: " . $e->getMessage());
             return $returnArray ? [] : null;
         }
     }
-
-    // پیدا کردن کاربران با جنسیت مخالف و پروفایل کامل
-    $oppositeGender = $this->getOppositeGender($user->gender);
-
-    error_log("🔵 جنسیت کاربر: {$user->gender} -> جنسیت مخالف: {$oppositeGender}");
-
-    try {
-        // 🔴 **استفاده از Eloquent به جای PDO**
-        $query = \App\Models\User::whereNotIn('id', $excludedUsers)
-            ->where('is_profile_completed', true)
-            ->where('is_active', true);
-        
-        // 🔴 **شرایط جنسیت با LIKE**
-        $query->where(function($q) use ($oppositeGender) {
-            $oppositeGenderEnglish = $this->getOppositeGenderEnglish($oppositeGender);
-            $oppositeGenderNumeric = $this->getOppositeGenderNumeric($oppositeGender);
-            
-            $q->where('gender', $oppositeGender)
-              ->orWhere('gender', $oppositeGenderEnglish)
-              ->orWhere('gender', $oppositeGenderNumeric)
-              ->orWhere('gender', 'like', "%{$oppositeGender}%")
-              ->orWhere('gender', 'like', "%{$oppositeGenderEnglish}%");
-        });
-
-        $results = $query->inRandomOrder()->limit(50)->get();
-
-        error_log("🔵 تعداد کاربران یافت شده با منطق پیشفرض: " . count($results));
-
-        if ($returnArray) {
-            PerformanceMonitor::start('find_suggestion_default');
-            return $results->all();
-        }
-
-        if ($results->isEmpty()) {
-            error_log("❌ هیچ کاربری با منطق پیشفرض یافت نشد");
-            return null;
-        }
-
-        // انتخاب تصادفی یک کاربر
-        $suggestedUser = $results->random();
-
-        // ثبت در تاریخچه
-        \App\Models\UserSuggestion::create($user->id, $suggestedUser->id);
-
-        error_log("✅ کاربر انتخاب شده با منطق پیشفرض: {$suggestedUser->id} - {$suggestedUser->first_name}");
-
-        return $suggestedUser;
-
-    } catch (\Exception $e) {
-        error_log("❌ خطا در منطق پیشفرض: " . $e->getMessage());
-        return $returnArray ? [] : null;
-    }
-}
     private function hasActiveFilters($userFilters)
     {
         if (empty($userFilters)) {
@@ -4355,107 +4411,107 @@ private function convertResultsToUserModels($results)
 
         return $opposites[$gender] ?? 'زن'; // مقدار پیشفرض
     }
-   private function showSuggestion($user, $chatId, $suggestedUser)
-{
-    // 🔴 **این متد فقط اطلاعات را نمایش می‌دهد - هیچ بررسی اشتراکی برای suggestedUser ندارد**
-    
-    $message = "📋 **مشخصات:**\n\n";
+    private function showSuggestion($user, $chatId, $suggestedUser)
+    {
+        // 🔴 **این متد فقط اطلاعات را نمایش می‌دهد - هیچ بررسی اشتراکی برای suggestedUser ندارد**
 
-    // نمایش فیلدهای عمومی پروفایل
-    $activeFields = ProfileField::getActiveFields();
-    $displayedFieldsCount = 0;
+        $message = "📋 **مشخصات:**\n\n";
 
-    foreach ($activeFields as $field) {
-        if ($this->shouldDisplayField($user, $field)) {
-            $value = $suggestedUser->{$field->field_name} ?? 'تعیین نشده';
+        // نمایش فیلدهای عمومی پروفایل
+        $activeFields = ProfileField::getActiveFields();
+        $displayedFieldsCount = 0;
 
-            if ($field->field_name === 'gender') {
-                $value = $this->convertGenderForDisplay($value);
-            } elseif ($field->field_type === 'select' && is_numeric($value)) {
-                $value = $this->convertSelectValueToText($field, $value);
+        foreach ($activeFields as $field) {
+            if ($this->shouldDisplayField($user, $field)) {
+                $value = $suggestedUser->{$field->field_name} ?? 'تعیین نشده';
+
+                if ($field->field_name === 'gender') {
+                    $value = $this->convertGenderForDisplay($value);
+                } elseif ($field->field_type === 'select' && is_numeric($value)) {
+                    $value = $this->convertSelectValueToText($field, $value);
+                }
+
+                $message .= "✅ {$field->field_label} : {$value}\n";
+                $displayedFieldsCount++;
             }
-
-            $message .= "✅ {$field->field_label} : {$value}\n";
-            $displayedFieldsCount++;
         }
-    }
 
-    if ($displayedFieldsCount === 0) {
-        $message .= "👀 اطلاعات بیشتری برای نمایش موجود نیست.\n";
-    }
+        if ($displayedFieldsCount === 0) {
+            $message .= "👀 اطلاعات بیشتری برای نمایش موجود نیست.\n";
+        }
 
-    $shownCount = \App\Models\UserSuggestion::getShownCount($user->id, $suggestedUser->id);
-    $message .= "\n⭐ این فرد {$shownCount} بار برای شما نمایش داده شده است.";
-    
-    // 🔴 **حذف وضعیت اشتراک کاربر پیشنهادی**
-    // ❌ خط زیر را حذف کنید
-    // $subscriptionStatus = $suggestedUser->hasActiveSubscription() ? "✅ دارای اشتراک فعال" : "❌ بدون اشتراک فعال";
-    // $message .= "\n📊 وضعیت اشتراک: {$subscriptionStatus}";
-    
-    // 🔴 **حذف اطلاع‌رسانی درباره اشتراک کاربر پیشنهادی**
-    // ❌ این بلاک را حذف کنید
-    // if (!$suggestedUser->hasActiveSubscription()) {
-    //     $message .= "\n⚠️ **توجه:** این کاربر در حال حاضر اشتراک فعال ندارد.";
-    //     $message .= "\nبرای درخواست تماس باید منتظر بمانید تا اشتراک تهیه کند.";
-    // }
-    
-    // 🔴 **اضافه کردن دکمه لایک**
-    $hasLiked = \App\Models\Like::hasLiked($user->id, $suggestedUser->id);
-    
-    $likeButtonText = $hasLiked ? '✅ لایک شده' : '❤️ لایک';
-    $likeCallbackData = $hasLiked ? 'already_liked' : "like:{$suggestedUser->id}";
+        $shownCount = \App\Models\UserSuggestion::getShownCount($user->id, $suggestedUser->id);
+        $message .= "\n⭐ این فرد {$shownCount} بار برای شما نمایش داده شده است.";
 
-    // 🔴 **دکمه درخواست تماس - همیشه فعال است**
-    // ✅ کاربر پیشنهادی نیازی به اشتراک ندارد
-    $contactButtonText = "📞 درخواست اطلاعات تماس";
-    $contactCallbackData = "request_contact:{$suggestedUser->id}";
+        // 🔴 **حذف وضعیت اشتراک کاربر پیشنهادی**
+        // ❌ خط زیر را حذف کنید
+        // $subscriptionStatus = $suggestedUser->hasActiveSubscription() ? "✅ دارای اشتراک فعال" : "❌ بدون اشتراک فعال";
+        // $message .= "\n📊 وضعیت اشتراک: {$subscriptionStatus}";
 
-    // 🔴 دکمه‌های اینلاین
-    $inlineKeyboard = [
-        'inline_keyboard' => [
-            [
-                ['text' => $contactButtonText, 'callback_data' => $contactCallbackData],
-                ['text' => $likeButtonText, 'callback_data' => $likeCallbackData]
+        // 🔴 **حذف اطلاع‌رسانی درباره اشتراک کاربر پیشنهادی**
+        // ❌ این بلاک را حذف کنید
+        // if (!$suggestedUser->hasActiveSubscription()) {
+        //     $message .= "\n⚠️ **توجه:** این کاربر در حال حاضر اشتراک فعال ندارد.";
+        //     $message .= "\nبرای درخواست تماس باید منتظر بمانید تا اشتراک تهیه کند.";
+        // }
+
+        // 🔴 **اضافه کردن دکمه لایک**
+        $hasLiked = \App\Models\Like::hasLiked($user->id, $suggestedUser->id);
+
+        $likeButtonText = $hasLiked ? '✅ لایک شده' : '❤️ لایک';
+        $likeCallbackData = $hasLiked ? 'already_liked' : "like:{$suggestedUser->id}";
+
+        // 🔴 **دکمه درخواست تماس - همیشه فعال است**
+        // ✅ کاربر پیشنهادی نیازی به اشتراک ندارد
+        $contactButtonText = "📞 درخواست اطلاعات تماس";
+        $contactCallbackData = "request_contact:{$suggestedUser->id}";
+
+        // 🔴 دکمه‌های اینلاین
+        $inlineKeyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => $contactButtonText, 'callback_data' => $contactCallbackData],
+                    ['text' => $likeButtonText, 'callback_data' => $likeCallbackData]
+                ]
             ]
-        ]
-    ];
+        ];
 
-    // 🔵 دکمه‌های دیگر به صورت ReplyKeyboard معمولی
-    $replyKeyboard = [
-        'keyboard' => [
-            [
-                ['text' => '💌 پیشنهاد بعدی']
+        // 🔵 دکمه‌های دیگر به صورت ReplyKeyboard معمولی
+        $replyKeyboard = [
+            'keyboard' => [
+                [
+                    ['text' => '💌 پیشنهاد بعدی']
+                ],
+                [
+                    ['text' => '⚙️ تنظیم فیلترها'],
+                    ['text' => '🔙 منوی اصلی']
+                ]
             ],
-            [
-                ['text' => '⚙️ تنظیم فیلترها'],
-                ['text' => '🔙 منوی اصلی']
-            ]
-        ],
-        'resize_keyboard' => true,
-        'one_time_keyboard' => false
-    ];
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
+        ];
 
-    if ($suggestedUser->telegram_photo_id) {
-        try {
-            // 🔴 ارسال عکس و اطلاعات در یک پیام با caption
-            $this->telegram->sendPhoto($chatId, $suggestedUser->telegram_photo_id, $message, $inlineKeyboard);
-        } catch (\Exception $e) {
-            error_log("❌ Error showing suggestion with photo: " . $e->getMessage());
-            // اگر ارسال عکس با caption شکست خورد، فقط متن را نمایش بده
+        if ($suggestedUser->telegram_photo_id) {
+            try {
+                // 🔴 ارسال عکس و اطلاعات در یک پیام با caption
+                $this->telegram->sendPhoto($chatId, $suggestedUser->telegram_photo_id, $message, $inlineKeyboard);
+            } catch (\Exception $e) {
+                error_log("❌ Error showing suggestion with photo: " . $e->getMessage());
+                // اگر ارسال عکس با caption شکست خورد، فقط متن را نمایش بده
+                $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
+            }
+        } else {
+            // اگر کاربر عکس ندارد، فقط متن را نمایش بده
             $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
         }
-    } else {
-        // اگر کاربر عکس ندارد، فقط متن را نمایش بده
-        $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
+
+        // ارسال کیبورد معمولی
+        $this->telegram->sendMessage($chatId, "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:", $replyKeyboard);
+
+        $newState = 'viewing_suggestion:' . $suggestedUser->id;
+        $user->update(['state' => $newState]);
+        error_log("💾 STATE UPDATED: {$newState}");
     }
-
-    // ارسال کیبورد معمولی
-    $this->telegram->sendMessage($chatId, "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:", $replyKeyboard);
-
-    $newState = 'viewing_suggestion:' . $suggestedUser->id;
-    $user->update(['state' => $newState]);
-    error_log("💾 STATE UPDATED: {$newState}");
-}
     // 🔴 متد جدید برای چک کردن نمایش فیلد
     private function shouldDisplayField($user, $field)
     {
@@ -4656,7 +4712,6 @@ private function convertResultsToUserModels($results)
             }
 
             return false;
-
         } catch (\Exception $e) {
             error_log("❌ خطا در ایجاد فیلتر سیستم {$field->field_name}: " . $e->getMessage());
             return false;
@@ -4713,7 +4768,6 @@ private function convertResultsToUserModels($results)
             }
 
             return false;
-
         } catch (\Exception $e) {
             error_log("❌ خطا در آپدیت فیلتر سیستم {$field->field_name}: " . $e->getMessage());
             return false;
@@ -4852,11 +4906,9 @@ private function convertResultsToUserModels($results)
                 }
 
                 $this->telegram->sendMessage($chatId, "✅ کاربر تستی ایجاد شد! حالا دکمه 'دریافت پیشنهاد' رو بزنید.");
-
             } else {
                 $this->telegram->sendMessage($chatId, "❌ خطا در ایجاد کاربر تستی");
             }
-
         } catch (\Exception $e) {
             error_log("Error creating test user: " . $e->getMessage());
             $this->telegram->sendMessage($chatId, "❌ خطا: " . $e->getMessage());
@@ -4947,168 +4999,167 @@ private function convertResultsToUserModels($results)
             } else {
                 $this->telegram->sendMessage($chatId, "❌ خطا در تغییر وضعیت فیلد");
             }
-
         } catch (\Exception $e) {
             error_log("❌ Error in adminToggleHiddenField: " . $e->getMessage());
             $this->telegram->sendMessage($chatId, "❌ خطا در تغییر وضعیت فیلد: " . $e->getMessage());
         }
     }
     private function handleContactRequest($user, $chatId, $suggestedUserId)
-{
-    $suggestedUser = User::find($suggestedUserId);
+    {
+        $suggestedUser = User::find($suggestedUserId);
 
-    if (!$suggestedUser) {
-        $this->telegram->sendMessage($chatId, "❌ کاربر پیدا نشد");
-        return;
-    }
-
-    // 🔴 **بررسی اشتراک فعال کاربر درخواست‌کننده**
-    if (!$user->hasActiveSubscription()) {
-        $message = "❌ **برای درخواست اطلاعات تماس نیاز به اشتراک فعال دارید!**\n\n";
-        $message .= "💎 با خرید اشتراک می‌توانید:\n";
-        $message .= "• اطلاعات تماس کاربران را مشاهده کنید\n";
-        $message .= "• پیشنهادات نامحدود دریافت کنید\n";
-        $message .= "• از امکانات ویژه ربات استفاده کنید\n\n";
-        $message .= "📋 برای مشاهده پلن‌های اشتراک، از منوی اصلی گزینه '💎 اشتراک من' را انتخاب کنید.";
-        
-        $this->telegram->sendMessage($chatId, $message);
-        return;
-    }
-    
-    $subscription = $user->getActiveSubscription();
-    
-    // 🔴 **بررسی سهمیه درخواست تماس کاربر درخواست‌کننده**
-    if (!$subscription->canRequestContact()) {
-        $stats = $subscription->getUsageStats();
-        
-        $message = "❌ **سهمیه درخواست تماس شما تمام شده!**\n\n";
-        $message .= "📊 **سهمیه روزانه:**\n";
-        $message .= "• استفاده شده: {$stats['daily_contacts']['used']} از {$stats['daily_contacts']['total']}\n";
-        $message .= "• باقی‌مانده: {$stats['daily_contacts']['remaining']}\n\n";
-        $message .= "📊 **سهمیه کلی:**\n";
-        $message .= "• استفاده شده: {$stats['total_contacts']['used']} از {$stats['total_contacts']['total']}\n";
-        $message .= "• باقی‌مانده: {$stats['total_contacts']['remaining']}\n\n";
-        $message .= "⏰ سهمیه روزانه هر 24 ساعت شارژ می‌شود.\n";
-        $message .= "🔄 برای افزایش سهمیه، می‌توانید اشتراک خود را ارتقا دهید.";
-        
-        $this->telegram->sendMessage($chatId, $message);
-        return;
-    }
-
-    // 🔴 چک کردن آیا قبلاً درخواست داده شده و تأیید شده
-    if ($this->hasApprovedContactRequest($user->id, $suggestedUserId)) {
-        // اگر قبلاً تأیید شده، اطلاعات رو نمایش بده
-        $this->showContactInfo($user, $chatId, $suggestedUserId, 0);
-        return;
-    }
-
-    // 🔴 چک کردن آیا درخواست pending داریم
-    $existingRequest = \App\Models\ContactRequest::where('requester_id', $user->id)
-        ->where('requested_id', $suggestedUserId)
-        ->first();
-        
-    if ($existingRequest) {
-        if ($existingRequest->isPending()) {
-            $this->telegram->sendMessage($chatId, "⏳ درخواست شما در انتظار تایید کاربر است.");
-        } elseif ($existingRequest->isApproved()) {
-            $this->showContactInfo($user, $chatId, $suggestedUserId, 0);
-        } elseif ($existingRequest->isRejected()) {
-            $this->telegram->sendMessage($chatId, "❌ درخواست قبلی شما توسط کاربر رد شده است.");
-        } elseif ($existingRequest->isWaitingForSubscription()) {
-            $this->telegram->sendMessage($chatId, "⏳ کاربر اشتراک فعال ندارد. منتظر باشید تا اشتراک تهیه کند.");
+        if (!$suggestedUser) {
+            $this->telegram->sendMessage($chatId, "❌ کاربر پیدا نشد");
+            return;
         }
-        return;
+
+        // 🔴 **بررسی اشتراک فعال کاربر درخواست‌کننده**
+        if (!$user->hasActiveSubscription()) {
+            $message = "❌ **برای درخواست اطلاعات تماس نیاز به اشتراک فعال دارید!**\n\n";
+            $message .= "💎 با خرید اشتراک می‌توانید:\n";
+            $message .= "• اطلاعات تماس کاربران را مشاهده کنید\n";
+            $message .= "• پیشنهادات نامحدود دریافت کنید\n";
+            $message .= "• از امکانات ویژه ربات استفاده کنید\n\n";
+            $message .= "📋 برای مشاهده پلن‌های اشتراک، از منوی اصلی گزینه '💎 اشتراک من' را انتخاب کنید.";
+
+            $this->telegram->sendMessage($chatId, $message);
+            return;
+        }
+
+        $subscription = $user->getActiveSubscription();
+
+        // 🔴 **بررسی سهمیه درخواست تماس کاربر درخواست‌کننده**
+        if (!$subscription->canRequestContact()) {
+            $stats = $subscription->getUsageStats();
+
+            $message = "❌ **سهمیه درخواست تماس شما تمام شده!**\n\n";
+            $message .= "📊 **سهمیه روزانه:**\n";
+            $message .= "• استفاده شده: {$stats['daily_contacts']['used']} از {$stats['daily_contacts']['total']}\n";
+            $message .= "• باقی‌مانده: {$stats['daily_contacts']['remaining']}\n\n";
+            $message .= "📊 **سهمیه کلی:**\n";
+            $message .= "• استفاده شده: {$stats['total_contacts']['used']} از {$stats['total_contacts']['total']}\n";
+            $message .= "• باقی‌مانده: {$stats['total_contacts']['remaining']}\n\n";
+            $message .= "⏰ سهمیه روزانه هر 24 ساعت شارژ می‌شود.\n";
+            $message .= "🔄 برای افزایش سهمیه، می‌توانید اشتراک خود را ارتقا دهید.";
+
+            $this->telegram->sendMessage($chatId, $message);
+            return;
+        }
+
+        // 🔴 چک کردن آیا قبلاً درخواست داده شده و تأیید شده
+        if ($this->hasApprovedContactRequest($user->id, $suggestedUserId)) {
+            // اگر قبلاً تأیید شده، اطلاعات رو نمایش بده
+            $this->showContactInfo($user, $chatId, $suggestedUserId, 0);
+            return;
+        }
+
+        // 🔴 چک کردن آیا درخواست pending داریم
+        $existingRequest = \App\Models\ContactRequest::where('requester_id', $user->id)
+            ->where('requested_id', $suggestedUserId)
+            ->first();
+
+        if ($existingRequest) {
+            if ($existingRequest->isPending()) {
+                $this->telegram->sendMessage($chatId, "⏳ درخواست شما در انتظار تایید کاربر است.");
+            } elseif ($existingRequest->isApproved()) {
+                $this->showContactInfo($user, $chatId, $suggestedUserId, 0);
+            } elseif ($existingRequest->isRejected()) {
+                $this->telegram->sendMessage($chatId, "❌ درخواست قبلی شما توسط کاربر رد شده است.");
+            } elseif ($existingRequest->isWaitingForSubscription()) {
+                $this->telegram->sendMessage($chatId, "⏳ کاربر اشتراک فعال ندارد. منتظر باشید تا اشتراک تهیه کند.");
+            }
+            return;
+        }
+
+        // 🔴 **استفاده از سهمیه اشتراک کاربر درخواست‌کننده برای ارسال درخواست**
+        if (!$subscription->useContactRequest()) {
+            $this->telegram->sendMessage($chatId, "❌ خطا در استفاده از سهمیه درخواست تماس!");
+            return;
+        }
+
+        // 🔴 ایجاد درخواست تماس جدید در سیستم دوطرفه
+        $this->createContactRequest($user, $suggestedUser, $chatId);
     }
+    private function sendContactRequestToRequestedUser($requestedUser, $requester, $requestId)
+    {
+        $chatId = $requestedUser->telegram_id;
 
-    // 🔴 **استفاده از سهمیه اشتراک کاربر درخواست‌کننده برای ارسال درخواست**
-    if (!$subscription->useContactRequest()) {
-        $this->telegram->sendMessage($chatId, "❌ خطا در استفاده از سهمیه درخواست تماس!");
-        return;
-    }
+        // اطلاعات درخواست‌کننده
+        $age = $requester->age ? "، {$requester->age} سال" : "";
+        $city = $requester->city ? "، {$requester->city}" : "";
 
-    // 🔴 ایجاد درخواست تماس جدید در سیستم دوطرفه
-    $this->createContactRequest($user, $suggestedUser, $chatId);
-}
-private function sendContactRequestToRequestedUser($requestedUser, $requester, $requestId)
-{
-    $chatId = $requestedUser->telegram_id;
-    
-    // اطلاعات درخواست‌کننده
-    $age = $requester->age ? "، {$requester->age} سال" : "";
-    $city = $requester->city ? "، {$requester->city}" : "";
-    
-    $message = "🔔 **درخواست جدید برای مشاهده اطلاعات تماس شما**\n\n";
-    $message .= "👤 **{$requester->first_name}{$age}{$city}**\n";
-    $message .= "📞 می‌خواهد اطلاعات تماس شما را دریافت کند.\n\n";
-    $message .= "💰 **تأثیر بر سهمیه شما:**\n";
-    $message .= "• در صورت تأیید، یک درخواست تماس از سهمیه شما کسر می‌شود.\n";
-    $message .= "• در صورت رد، هیچ سهمیه‌ای مصرف نمی‌شود.\n\n";
-    $message .= "🔍 قبل از تصمیم‌گیری می‌توانید پروفایل کاربر را مشاهده کنید.";
+        $message = "🔔 **درخواست جدید برای مشاهده اطلاعات تماس شما**\n\n";
+        $message .= "👤 **{$requester->first_name}{$age}{$city}**\n";
+        $message .= "📞 می‌خواهد اطلاعات تماس شما را دریافت کند.\n\n";
+        $message .= "💰 **تأثیر بر سهمیه شما:**\n";
+        $message .= "• در صورت تأیید، یک درخواست تماس از سهمیه شما کسر می‌شود.\n";
+        $message .= "• در صورت رد، هیچ سهمیه‌ای مصرف نمی‌شود.\n\n";
+        $message .= "🔍 قبل از تصمیم‌گیری می‌توانید پروفایل کاربر را مشاهده کنید.";
 
-    $keyboard = [
-        'inline_keyboard' => [
-            [
-                ['text' => '👀 مشاهده پروفایل کاربر', 'callback_data' => 'view_requester_profile:' . $requester->id . ':' . $requestId]
-            ],
-            [
-                ['text' => '✅ تأیید درخواست', 'callback_data' => 'approve_contact:' . $requestId],
-                ['text' => '❌ رد درخواست', 'callback_data' => 'reject_contact:' . $requestId]
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => '👀 مشاهده پروفایل کاربر', 'callback_data' => 'view_requester_profile:' . $requester->id . ':' . $requestId]
+                ],
+                [
+                    ['text' => '✅ تأیید درخواست', 'callback_data' => 'approve_contact:' . $requestId],
+                    ['text' => '❌ رد درخواست', 'callback_data' => 'reject_contact:' . $requestId]
+                ]
             ]
-        ]
-    ];
+        ];
 
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
-private function sendSubscriptionRequiredNotification($requestedUser, $requester)
-{
-    $chatId = $requestedUser->telegram_id;
-    
-    $age = $requester->age ? "، {$requester->age} سال" : "";
-    $city = $requester->city ? "، {$requester->city}" : "";
-    
-    $message = "🔔 **درخواست جدید برای مشاهده اطلاعات تماس شما**\n\n";
-    $message .= "👤 **{$requester->first_name}{$age}{$city}**\n";
-    $message .= "📞 می‌خواهد اطلاعات تماس شما را دریافت کند.\n\n";
-    $message .= "⚠️ **برای ادامه نیاز به اشتراک دارید**\n";
-    $message .= "برای مشاهده جزئیات درخواست و تأیید یا رد آن، باید اشتراک فعال داشته باشید.\n\n";
-    $message .= "💎 از طریق منوی اصلی → 'اشتراک من' می‌توانید اشتراک تهیه کنید.\n\n";
-    $message .= "📝 درخواست ذخیره شده و پس از فعال‌سازی اشتراک می‌توانید آن را بررسی کنید.";
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+    }
+    private function sendSubscriptionRequiredNotification($requestedUser, $requester)
+    {
+        $chatId = $requestedUser->telegram_id;
 
-    $this->telegram->sendMessage($chatId, $message);
-}
-private function getContactInfo($user)
-{
-    $info = "👤 **{$user->first_name}";
-    
-    if ($user->last_name) {
-        $info .= " {$user->last_name}";
+        $age = $requester->age ? "، {$requester->age} سال" : "";
+        $city = $requester->city ? "، {$requester->city}" : "";
+
+        $message = "🔔 **درخواست جدید برای مشاهده اطلاعات تماس شما**\n\n";
+        $message .= "👤 **{$requester->first_name}{$age}{$city}**\n";
+        $message .= "📞 می‌خواهد اطلاعات تماس شما را دریافت کند.\n\n";
+        $message .= "⚠️ **برای ادامه نیاز به اشتراک دارید**\n";
+        $message .= "برای مشاهده جزئیات درخواست و تأیید یا رد آن، باید اشتراک فعال داشته باشید.\n\n";
+        $message .= "💎 از طریق منوی اصلی → 'اشتراک من' می‌توانید اشتراک تهیه کنید.\n\n";
+        $message .= "📝 درخواست ذخیره شده و پس از فعال‌سازی اشتراک می‌توانید آن را بررسی کنید.";
+
+        $this->telegram->sendMessage($chatId, $message);
     }
-    
-    $info .= "**\n\n";
-    
-    // نمایش اطلاعات تماس (مثلاً موبایل)
-    if ($user->mobile) {
-        $info .= "📱 موبایل: {$user->mobile}\n";
+    private function getContactInfo($user)
+    {
+        $info = "👤 **{$user->first_name}";
+
+        if ($user->last_name) {
+            $info .= " {$user->last_name}";
+        }
+
+        $info .= "**\n\n";
+
+        // نمایش اطلاعات تماس (مثلاً موبایل)
+        if ($user->mobile) {
+            $info .= "📱 موبایل: {$user->mobile}\n";
+        }
+
+        // نمایش آیدی تلگرام
+        if ($user->username) {
+            $info .= "🔗 آیدی تلگرام: @{$user->username}\n";
+        }
+
+        // اطلاعات اضافی
+        if ($user->age) {
+            $info .= "📅 سن: {$user->age}\n";
+        }
+
+        if ($user->city) {
+            $info .= "🏙️ شهر: {$user->city}\n";
+        }
+
+        $info .= "\n💡 می‌توانید از طریق اطلاعات بالا با کاربر در ارتباط باشید.";
+
+        return $info;
     }
-    
-    // نمایش آیدی تلگرام
-    if ($user->username) {
-        $info .= "🔗 آیدی تلگرام: @{$user->username}\n";
-    }
-    
-    // اطلاعات اضافی
-    if ($user->age) {
-        $info .= "📅 سن: {$user->age}\n";
-    }
-    
-    if ($user->city) {
-        $info .= "🏙️ شهر: {$user->city}\n";
-    }
-    
-    $info .= "\n💡 می‌توانید از طریق اطلاعات بالا با کاربر در ارتباط باشید.";
-    
-    return $info;
-}
 
 
     // // 🔴 متد جدید برای پردازش پرداخت پس از تأیید
@@ -5141,258 +5192,258 @@ private function getContactInfo($user)
     //     \App\Models\UserSuggestion::markContactRequested($user->id, $suggestedUserId);
     // }
 
-   // متد نمایش اطلاعات تماس (برای وقتی که قبلاً تأیید شده)
-private function showContactInfo($user, $chatId, $requestedUserId, $cost)
-{
-    $requestedUser = User::find($requestedUserId);
-    if (!$requestedUser) {
-        $this->telegram->sendMessage($chatId, "❌ کاربر پیدا نشد");
-        return;
-    }
-    
-    $contactInfo = $this->getContactInfo($requestedUser);
-    
-    $message = "✅ **اطلاعات تماس کاربر**\n\n";
-    $message .= "👤 کاربر: " . $requestedUser->first_name . "\n\n";
-    $message .= $contactInfo . "\n\n";
-    $message .= "💾 این اطلاعات قبلاً تأیید شده و در تاریخچه شما موجود است.";
-    
-    // ایجاد کیبورد
-    $keyboardButtons = [];
-    
-    if (!empty($requestedUser->username)) {
+    // متد نمایش اطلاعات تماس (برای وقتی که قبلاً تأیید شده)
+    private function showContactInfo($user, $chatId, $requestedUserId, $cost)
+    {
+        $requestedUser = User::find($requestedUserId);
+        if (!$requestedUser) {
+            $this->telegram->sendMessage($chatId, "❌ کاربر پیدا نشد");
+            return;
+        }
+
+        $contactInfo = $this->getContactInfo($requestedUser);
+
+        $message = "✅ **اطلاعات تماس کاربر**\n\n";
+        $message .= "👤 کاربر: " . $requestedUser->first_name_display . "\n\n";
+        $message .= $contactInfo . "\n\n";
+        $message .= "💾 این اطلاعات قبلاً تأیید شده و در تاریخچه شما موجود است.";
+
+        // ایجاد کیبورد
+        $keyboardButtons = [];
+
+        if (!empty($requestedUser->username)) {
+            $keyboardButtons[] = [
+                ['text' => '📝 ارسال پیام به کاربر', 'url' => 'https://t.me/' . $requestedUser->username]
+            ];
+        }
+
         $keyboardButtons[] = [
-            ['text' => '📝 ارسال پیام به کاربر', 'url' => 'https://t.me/' . $requestedUser->username]
+            ['text' => '📋 تاریخچه تماس‌ها', 'callback_data' => 'contact_history']
         ];
+
+        $keyboard = [
+            'inline_keyboard' => $keyboardButtons
+        ];
+
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
     }
-    
-    $keyboardButtons[] = [
-        ['text' => '📋 تاریخچه تماس‌ها', 'callback_data' => 'contact_history']
-    ];
-    
-    $keyboard = [
-        'inline_keyboard' => $keyboardButtons
-    ];
-    
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
 
 
 
     private function showContactHistory($user, $chatId, $page = 1)
-{
-    $pdo = $this->getPDO();
+    {
+        $pdo = $this->getPDO();
 
-    // محاسبه صفحه‌بندی
-    $perPage = 6; // تغییر به 6 تا در هر صفحه 3 ردیف دو تایی داشته باشیم
-    $offset = ($page - 1) * $perPage;
+        // محاسبه صفحه‌بندی
+        $perPage = 6; // تغییر به 6 تا در هر صفحه 3 ردیف دو تایی داشته باشیم
+        $offset = ($page - 1) * $perPage;
 
-    // تعداد کل رکوردها
-    $countSql = "SELECT COUNT(*) as total FROM contact_request_history WHERE user_id = ?";
-    $countStmt = $pdo->prepare($countSql);
-    $countStmt->execute([$user->id]);
-    $totalCount = $countStmt->fetch(\PDO::FETCH_OBJ)->total;
-    $totalPages = ceil($totalCount / $perPage);
+        // تعداد کل رکوردها
+        $countSql = "SELECT COUNT(*) as total FROM contact_request_history WHERE user_id = ?";
+        $countStmt = $pdo->prepare($countSql);
+        $countStmt->execute([$user->id]);
+        $totalCount = $countStmt->fetch(\PDO::FETCH_OBJ)->total;
+        $totalPages = ceil($totalCount / $perPage);
 
-    // دریافت رکوردهای صفحه جاری
-    $sql = "SELECT crh.*, u.first_name, u.username, u.telegram_id 
+        // دریافت رکوردهای صفحه جاری
+        $sql = "SELECT crh.*, u.first_name, u.username, u.telegram_id 
         FROM contact_request_history crh 
         JOIN users u ON crh.requested_user_id = u.id 
         WHERE crh.user_id = ? 
         ORDER BY crh.requested_at DESC 
         LIMIT ? OFFSET ?";
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->bindValue(1, $user->id, \PDO::PARAM_INT);
-    $stmt->bindValue(2, $perPage, \PDO::PARAM_INT);
-    $stmt->bindValue(3, $offset, \PDO::PARAM_INT);
-    $stmt->execute();
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(1, $user->id, \PDO::PARAM_INT);
+        $stmt->bindValue(2, $perPage, \PDO::PARAM_INT);
+        $stmt->bindValue(3, $offset, \PDO::PARAM_INT);
+        $stmt->execute();
 
-    $history = $stmt->fetchAll(\PDO::FETCH_OBJ);
+        $history = $stmt->fetchAll(\PDO::FETCH_OBJ);
 
-    if (empty($history)) {
-        $message = "📜 **تاریخچه درخواست‌های تماس**\n\n";
-        $message .= "📭 شما تاکنون هیچ درخواست تماسی نداشته‌اید.\n\n";
-        $message .= "💡 پس از درخواست اطلاعات تماس برای هر کاربر، اطلاعات آنها در اینجا ذخیره می‌شود و می‌توانید بدون پرداخت مجدد آنها را مشاهده کنید.";
+        if (empty($history)) {
+            $message = "📜 **تاریخچه درخواست‌های تماس**\n\n";
+            $message .= "📭 شما تاکنون هیچ درخواست تماسی نداشته‌اید.\n\n";
+            $message .= "💡 پس از درخواست اطلاعات تماس برای هر کاربر، اطلاعات آنها در اینجا ذخیره می‌شود و می‌توانید بدون پرداخت مجدد آنها را مشاهده کنید.";
 
-        // کیبورد ثابت برای حالت خالی
+            // کیبورد ثابت برای حالت خالی
+            $replyKeyboard = [
+                'keyboard' => [
+                    [
+                        ['text' => '💌 دریافت پیشنهاد'],
+                        ['text' => '🔙 منوی اصلی']
+                    ]
+                ],
+                'resize_keyboard' => true,
+                'one_time_keyboard' => false
+            ];
+
+            $this->telegram->sendMessage($chatId, $message, $replyKeyboard);
+            return;
+        }
+
+        $message = "📜 **تاریخچه درخواست‌های تماس شما**\n\n";
+        $message .= "👥 تعداد کل: " . $totalCount . " نفر\n";
+        $message .= "📄 صفحه: " . $page . " از " . $totalPages . "\n\n";
+
+        foreach ($history as $index => $record) {
+            $globalIndex = $offset + $index + 1;
+
+            // تبدیل تاریخ به شمسی
+            $requestDate = $this->toPersianDate($record->requested_at, 'Y/m/d');
+
+            $message .= "**" . $globalIndex . ". {$record->first_name}**\n";
+            $message .= "📅 {$requestDate} | 💰 " . number_format($record->amount_paid) . " تومان\n";
+            $message .= "────────────\n";
+        }
+
+        // ایجاد کیبورد ثابت با دو دکمه در هر ردیف
+        $keyboardRows = [];
+        $tempRow = [];
+
+        foreach ($history as $record) {
+            $buttonText = "👤 {$record->first_name}";
+            $tempRow[] = ['text' => $buttonText];
+
+            // ذخیره با نوع 'contact'
+            $this->saveButtonInfo($user->id, $buttonText, $record->requested_user_id, null, 'contact');
+
+            if (count($tempRow) === 2) {
+                $keyboardRows[] = $tempRow;
+                $tempRow = [];
+            }
+        }
+
+        // اگر دکمه‌های باقیمانده وجود داشت، آنها را اضافه کن
+        if (!empty($tempRow)) {
+            $keyboardRows[] = $tempRow;
+        }
+
+        // اضافه کردن دکمه‌های ناوبری
+        $navButtons = [];
+        if ($page > 1) {
+            $navButtons[] = ['text' => '⏪ صفحه قبلی'];
+        }
+        if ($page < $totalPages) {
+            $navButtons[] = ['text' => 'صفحه بعدی ⏩'];
+        }
+
+        if (!empty($navButtons)) {
+            $keyboardRows[] = $navButtons;
+        }
+
+        // دکمه‌های اصلی
+        $keyboardRows[] = [
+            ['text' => '💌 پیشنهاد جدید'],
+            ['text' => '🔙 منوی اصلی']
+        ];
+
+        // کیبورد معمولی ثابت
         $replyKeyboard = [
-            'keyboard' => [
-                [
-                    ['text' => '💌 دریافت پیشنهاد'],
-                    ['text' => '🔙 منوی اصلی']
-                ]
-            ],
+            'keyboard' => $keyboardRows,
             'resize_keyboard' => true,
             'one_time_keyboard' => false
         ];
 
+        // ارسال پیام با کیبورد ثابت
         $this->telegram->sendMessage($chatId, $message, $replyKeyboard);
-        return;
     }
 
-    $message = "📜 **تاریخچه درخواست‌های تماس شما**\n\n";
-    $message .= "👥 تعداد کل: " . $totalCount . " نفر\n";
-    $message .= "📄 صفحه: " . $page . " از " . $totalPages . "\n\n";
+    // اگر تابع toPersianDate را ندارید، این را اضافه کنید:
+    private function toPersianDate($date, $format = 'Y/m/d')
+    {
+        if (!$date) {
+            return 'نامشخص';
+        }
 
-    foreach ($history as $index => $record) {
-        $globalIndex = $offset + $index + 1;
-        
-        // تبدیل تاریخ به شمسی
-        $requestDate = $this->toPersianDate($record->requested_at, 'Y/m/d');
+        try {
+            $jdate = \Morilog\Jalali\Jalalian::fromDateTime($date);
+            return $jdate->format($format);
+        } catch (\Exception $e) {
+            error_log("Persian date conversion error: " . $e->getMessage());
 
-        $message .= "**" . $globalIndex . ". {$record->first_name}**\n";
-        $message .= "📅 {$requestDate} | 💰 " . number_format($record->amount_paid) . " تومان\n";
-        $message .= "────────────\n";
-    }
+            // در صورت خطا، تاریخ میلادی برگردان
+            if ($date instanceof \Carbon\Carbon) {
+                return $date->format($format);
+            }
 
-    // ایجاد کیبورد ثابت با دو دکمه در هر ردیف
-    $keyboardRows = [];
-    $tempRow = [];
+            // اگر format شمسی را داریم، به میلادی تغییر دهیم
+            $format = str_replace(
+                ['Y', 'm', 'd', 'H', 'i', 's'],
+                ['Y', 'm', 'd', 'H', 'i', 's'],
+                $format
+            );
 
-    foreach ($history as $record) {
-        $buttonText = "👤 {$record->first_name}";
-        $tempRow[] = ['text' => $buttonText];
-        
-        // ذخیره با نوع 'contact'
-        $this->saveButtonInfo($user->id, $buttonText, $record->requested_user_id, null, 'contact');
-        
-        if (count($tempRow) === 2) {
-            $keyboardRows[] = $tempRow;
-            $tempRow = [];
+            return date($format, strtotime($date));
         }
     }
 
-    // اگر دکمه‌های باقیمانده وجود داشت، آنها را اضافه کن
-    if (!empty($tempRow)) {
-        $keyboardRows[] = $tempRow;
-    }
 
-    // اضافه کردن دکمه‌های ناوبری
-    $navButtons = [];
-    if ($page > 1) {
-        $navButtons[] = ['text' => '⏪ صفحه قبلی'];
-    }
-    if ($page < $totalPages) {
-        $navButtons[] = ['text' => 'صفحه بعدی ⏩'];
-    }
+    /**
+     * ذخیره اطلاعات دکمه در جدول user_button_sessions
+     */
+    private function saveButtonInfo($userId, $buttonText, $requestedUserId = null, $planId = null, $sessionType = 'contact')
+    {
+        $pdo = $this->getPDO();
 
-    if (!empty($navButtons)) {
-        $keyboardRows[] = $navButtons;
-    }
+        // حذف رکوردهای قدیمی برای همین کاربر و نوع session
+        $deleteSql = "DELETE FROM user_button_sessions WHERE user_id = ? AND session_type = ? AND button_text = ?";
+        $deleteStmt = $pdo->prepare($deleteSql);
+        $deleteStmt->execute([$userId, $sessionType, $buttonText]);
 
-    // دکمه‌های اصلی
-    $keyboardRows[] = [
-        ['text' => '💌 پیشنهاد جدید'],
-        ['text' => '🔙 منوی اصلی']
-    ];
-
-    // کیبورد معمولی ثابت
-    $replyKeyboard = [
-        'keyboard' => $keyboardRows,
-        'resize_keyboard' => true,
-        'one_time_keyboard' => false
-    ];
-
-    // ارسال پیام با کیبورد ثابت
-    $this->telegram->sendMessage($chatId, $message, $replyKeyboard);
-}
-
-// اگر تابع toPersianDate را ندارید، این را اضافه کنید:
-private function toPersianDate($date, $format = 'Y/m/d')
-{
-    if (!$date) {
-        return 'نامشخص';
-    }
-    
-    try {
-        $jdate = \Morilog\Jalali\Jalalian::fromDateTime($date);
-        return $jdate->format($format);
-    } catch (\Exception $e) {
-        error_log("Persian date conversion error: " . $e->getMessage());
-        
-        // در صورت خطا، تاریخ میلادی برگردان
-        if ($date instanceof \Carbon\Carbon) {
-            return $date->format($format);
-        }
-        
-        // اگر format شمسی را داریم، به میلادی تغییر دهیم
-        $format = str_replace(
-            ['Y', 'm', 'd', 'H', 'i', 's'],
-            ['Y', 'm', 'd', 'H', 'i', 's'],
-            $format
-        );
-        
-        return date($format, strtotime($date));
-    }
-}
-
-
-/**
- * ذخیره اطلاعات دکمه در جدول user_button_sessions
- */
-private function saveButtonInfo($userId, $buttonText, $requestedUserId = null, $planId = null, $sessionType = 'contact')
-{
-    $pdo = $this->getPDO();
-    
-    // حذف رکوردهای قدیمی برای همین کاربر و نوع session
-    $deleteSql = "DELETE FROM user_button_sessions WHERE user_id = ? AND session_type = ? AND button_text = ?";
-    $deleteStmt = $pdo->prepare($deleteSql);
-    $deleteStmt->execute([$userId, $sessionType, $buttonText]);
-    
-    // اضافه کردن رکورد جدید
-    $sql = "INSERT INTO user_button_sessions (user_id, button_text, session_type, requested_user_id, plan_id, created_at, expires_at) 
+        // اضافه کردن رکورد جدید
+        $sql = "INSERT INTO user_button_sessions (user_id, button_text, session_type, requested_user_id, plan_id, created_at, expires_at) 
             VALUES (?, ?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR))";
-    
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$userId, $buttonText, $sessionType, $requestedUserId, $planId]);
-}
-/**
- * بازیابی اطلاعات دکمه از جدول user_button_sessions
- */
-private function getButtonInfo($userId, $buttonText, $sessionType = null)
-{
-    $pdo = $this->getPDO();
-    
-    if ($sessionType) {
-        $sql = "SELECT requested_user_id, plan_id, session_type 
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$userId, $buttonText, $sessionType, $requestedUserId, $planId]);
+    }
+    /**
+     * بازیابی اطلاعات دکمه از جدول user_button_sessions
+     */
+    private function getButtonInfo($userId, $buttonText, $sessionType = null)
+    {
+        $pdo = $this->getPDO();
+
+        if ($sessionType) {
+            $sql = "SELECT requested_user_id, plan_id, session_type 
                 FROM user_button_sessions 
                 WHERE user_id = ? AND button_text = ? AND session_type = ?
                 ORDER BY created_at DESC LIMIT 1";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$userId, $buttonText, $sessionType]);
-    } else {
-        $sql = "SELECT requested_user_id, plan_id, session_type 
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$userId, $buttonText, $sessionType]);
+        } else {
+            $sql = "SELECT requested_user_id, plan_id, session_type 
                 FROM user_button_sessions 
                 WHERE user_id = ? AND button_text = ? 
                 ORDER BY created_at DESC LIMIT 1";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$userId, $buttonText]);
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$userId, $buttonText]);
+        }
+
+        return $stmt->fetch(\PDO::FETCH_OBJ);
     }
-    
-    return $stmt->fetch(\PDO::FETCH_OBJ);
-}
-private function clearUserButtonSessions($userId, $sessionType = null)
-{
-    $pdo = $this->getPDO();
-    
-    if ($sessionType) {
-        $sql = "DELETE FROM user_button_sessions WHERE user_id = ? AND session_type = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$userId, $sessionType]);
-    } else {
-        $sql = "DELETE FROM user_button_sessions WHERE user_id = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$userId]);
+    private function clearUserButtonSessions($userId, $sessionType = null)
+    {
+        $pdo = $this->getPDO();
+
+        if ($sessionType) {
+            $sql = "DELETE FROM user_button_sessions WHERE user_id = ? AND session_type = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$userId, $sessionType]);
+        } else {
+            $sql = "DELETE FROM user_button_sessions WHERE user_id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$userId]);
+        }
     }
-}
-private function cleanupExpiredSessions()
-{
-    $pdo = $this->getPDO();
-    $sql = "DELETE FROM user_button_sessions WHERE expires_at < NOW()";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute();
-}
+    private function cleanupExpiredSessions()
+    {
+        $pdo = $this->getPDO();
+        $sql = "DELETE FROM user_button_sessions WHERE expires_at < NOW()";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute();
+    }
 
     private function getRequestedUserIdFromButton($userId, $buttonText)
     {
@@ -5409,117 +5460,117 @@ private function cleanupExpiredSessions()
     }
 
     private function handleContactHistoryUserClick($user, $chatId, $buttonText)
-{
-    $buttonInfo = $this->getButtonInfo($user->id, $buttonText, 'contact');
-    
-    if ($buttonInfo && $buttonInfo->requested_user_id) {
-        $this->showContactDetails($user, $chatId, $buttonInfo->requested_user_id);
-    } else {
-        $this->telegram->sendMessage($chatId, "❌ اطلاعات کاربر یافت نشد.");
-    }
-}
-    private function showContactDetails($user, $chatId, $requestedUserId)
-{
-    $pdo = $this->getPDO();
+    {
+        $buttonInfo = $this->getButtonInfo($user->id, $buttonText, 'contact');
 
-    // دریافت اطلاعات کاربر مورد نظر
-    $userSql = "SELECT * FROM users WHERE id = ?";
-    $userStmt = $pdo->prepare($userSql);
-    $userStmt->execute([$requestedUserId]);
-    $requestedUser = $userStmt->fetch(\PDO::FETCH_OBJ);
-
-    if (!$requestedUser) {
-        $this->telegram->sendMessage($chatId, "❌ کاربر پیدا نشد");
-        return;
-    }
-
-    // دریافت اطلاعات تاریخچه
-    $historySql = "SELECT * FROM contact_request_history WHERE user_id = ? AND requested_user_id = ?";
-    $historyStmt = $pdo->prepare($historySql);
-    $historyStmt->execute([$user->id, $requestedUserId]);
-    $historyRecord = $historyStmt->fetch(\PDO::FETCH_OBJ);
-
-    // استفاده از escape برای تمام مقادیر متغیر
-    $firstName = $this->escapeMarkdown($requestedUser->first_name);
-    $username = $this->escapeMarkdown($requestedUser->username);
-    
-    $message = "👤 **مشخصات کامل کاربر**\n\n";
-    $message .= "**{$firstName}**\n";
-
-    if (!empty($requestedUser->username)) {
-        $message .= "📧 آیدی: @{$username}\n";
-    }
-
-    $message .= "🆔 شناسه: {$requestedUser->telegram_id}\n";
-
-    if ($historyRecord) {
-        $requestDate = date('Y-m-d H:i', strtotime($historyRecord->requested_at));
-        $message .= "💰 مبلغ پرداختی: " . number_format($historyRecord->amount_paid) . " تومان\n";
-        $message .= "📅 تاریخ درخواست: {$requestDate}\n";
-    }
-
-    $message .= "\n**مشخصات پروفایل:**\n";
-
-    // نمایش فیلدهای پروفایل
-    $activeFields = ProfileField::getActiveFields();
-    $displayedCount = 0;
-
-    foreach ($activeFields as $field) {
-        $value = $requestedUser->{$field->field_name} ?? null;
-
-        if (!empty($value)) {
-            // تبدیل جنسیت به فارسی برای نمایش
-            if ($field->field_name === 'gender') {
-                $value = $this->convertGenderForDisplay($value);
-            }
-            // اگر فیلد از نوع select هست و مقدار عددی داره، به متن تبدیل کن 
-            elseif ($field->field_type === 'select' && is_numeric($value)) {
-                $value = $this->convertSelectValueToText($field, $value);
-            }
-
-            // escape کردن مقدار برای جلوگیری از مشکل Markdown
-            $escapedValue = $this->escapeMarkdown($value);
-            $escapedLabel = $this->escapeMarkdown($field->field_label);
-            
-            $message .= "• ✅ {$escapedLabel} : {$escapedValue}\n";
-            $displayedCount++;
+        if ($buttonInfo && $buttonInfo->requested_user_id) {
+            $this->showContactDetails($user, $chatId, $buttonInfo->requested_user_id);
+        } else {
+            $this->telegram->sendMessage($chatId, "❌ اطلاعات کاربر یافت نشد.");
         }
     }
+    private function showContactDetails($user, $chatId, $requestedUserId)
+    {
+        $pdo = $this->getPDO();
 
-    if ($displayedCount === 0) {
-        $message .= "📝 اطلاعات پروفایل تکمیل نشده است.\n";
-    }
+        // دریافت اطلاعات کاربر مورد نظر
+        $userSql = "SELECT * FROM users WHERE id = ?";
+        $userStmt = $pdo->prepare($userSql);
+        $userStmt->execute([$requestedUserId]);
+        $requestedUser = $userStmt->fetch(\PDO::FETCH_OBJ);
 
-    $message .= "\n💡 این اطلاعات قبلاً توسط شما خریداری شده و اکنون رایگان در دسترس شماست.";
+        if (!$requestedUser) {
+            $this->telegram->sendMessage($chatId, "❌ کاربر پیدا نشد");
+            return;
+        }
 
-    // کیبورد معمولی (ثابت)
-    $keyboard = [
-        'keyboard' => [
-            [
-                ['text' => '📜 بازگشت به تاریخچه'],
-                ['text' => '🔙 بازگشت به منوی اصلی']
-            ]
-        ],
-        'resize_keyboard' => true,
-        'one_time_keyboard' => false
-    ];
+        // دریافت اطلاعات تاریخچه
+        $historySql = "SELECT * FROM contact_request_history WHERE user_id = ? AND requested_user_id = ?";
+        $historyStmt = $pdo->prepare($historySql);
+        $historyStmt->execute([$user->id, $requestedUserId]);
+        $historyRecord = $historyStmt->fetch(\PDO::FETCH_OBJ);
 
-    // نمایش عکس و اطلاعات در یک پیام
-    if ($requestedUser->telegram_photo_id) {
-        try {
-            // ارسال عکس با اطلاعات به عنوان caption - اضافه کردن parse_mode
-            $this->telegram->sendPhoto($chatId, $requestedUser->telegram_photo_id, $message, $keyboard, 'Markdown');
-        } catch (\Exception $e) {
-            error_log("❌ Error sending photo with contact details: " . $e->getMessage());
-            // اگر ارسال عکس شکست خورد، فقط متن را نمایش بده
+        // استفاده از escape برای تمام مقادیر متغیر
+        $firstName = $this->escapeMarkdown($requestedUser->first_name);
+        $username = $this->escapeMarkdown($requestedUser->username);
+
+        $message = "👤 **مشخصات کامل کاربر**\n\n";
+        $message .= "**{$firstName}**\n";
+
+        if (!empty($requestedUser->username)) {
+            $message .= "📧 آیدی: @{$username}\n";
+        }
+
+        $message .= "🆔 شناسه: {$requestedUser->telegram_id}\n";
+
+        if ($historyRecord) {
+            $requestDate = date('Y-m-d H:i', strtotime($historyRecord->requested_at));
+            $message .= "💰 مبلغ پرداختی: " . number_format($historyRecord->amount_paid) . " تومان\n";
+            $message .= "📅 تاریخ درخواست: {$requestDate}\n";
+        }
+
+        $message .= "\n**مشخصات پروفایل:**\n";
+
+        // نمایش فیلدهای پروفایل
+        $activeFields = ProfileField::getActiveFields();
+        $displayedCount = 0;
+
+        foreach ($activeFields as $field) {
+            $value = $requestedUser->{$field->field_name} ?? null;
+
+            if (!empty($value)) {
+                // تبدیل جنسیت به فارسی برای نمایش
+                if ($field->field_name === 'gender') {
+                    $value = $this->convertGenderForDisplay($value);
+                }
+                // اگر فیلد از نوع select هست و مقدار عددی داره، به متن تبدیل کن 
+                elseif ($field->field_type === 'select' && is_numeric($value)) {
+                    $value = $this->convertSelectValueToText($field, $value);
+                }
+
+                // escape کردن مقدار برای جلوگیری از مشکل Markdown
+                $escapedValue = $this->escapeMarkdown($value);
+                $escapedLabel = $this->escapeMarkdown($field->field_label);
+
+                $message .= "• ✅ {$escapedLabel} : {$escapedValue}\n";
+                $displayedCount++;
+            }
+        }
+
+        if ($displayedCount === 0) {
+            $message .= "📝 اطلاعات پروفایل تکمیل نشده است.\n";
+        }
+
+        $message .= "\n💡 این اطلاعات قبلاً توسط شما خریداری شده و اکنون رایگان در دسترس شماست.";
+
+        // کیبورد معمولی (ثابت)
+        $keyboard = [
+            'keyboard' => [
+                [
+                    ['text' => '📜 بازگشت به تاریخچه'],
+                    ['text' => '🔙 بازگشت به منوی اصلی']
+                ]
+            ],
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
+        ];
+
+        // نمایش عکس و اطلاعات در یک پیام
+        if ($requestedUser->telegram_photo_id) {
+            try {
+                // ارسال عکس با اطلاعات به عنوان caption - اضافه کردن parse_mode
+                $this->telegram->sendPhoto($chatId, $requestedUser->telegram_photo_id, $message, $keyboard, 'Markdown');
+            } catch (\Exception $e) {
+                error_log("❌ Error sending photo with contact details: " . $e->getMessage());
+                // اگر ارسال عکس شکست خورد، فقط متن را نمایش بده
+                $this->telegram->sendMessage($chatId, $message, $keyboard, 'Markdown');
+            }
+        } else {
+            // اگر کاربر عکس ندارد، فقط متن را نمایش بده
             $this->telegram->sendMessage($chatId, $message, $keyboard, 'Markdown');
         }
-    } else {
-        // اگر کاربر عکس ندارد، فقط متن را نمایش بده
-        $this->telegram->sendMessage($chatId, $message, $keyboard, 'Markdown');
     }
-}
-    
+
     private function testFilterSystem($user, $chatId)
     {
         $userFilters = UserFilter::getFilters($user->id);
@@ -5610,7 +5661,6 @@ private function cleanupExpiredSessions()
             } else {
                 $message = "❌ **خطا در بروزرسانی فیلتر جنسیت**";
             }
-
         } catch (\Exception $e) {
             $message = "❌ **خطا در بروزرسانی فیلتر جنسیت:**\n" . $e->getMessage();
         }
@@ -5847,7 +5897,6 @@ private function cleanupExpiredSessions()
             } else {
                 $message .= "\n❌ **هیچ کاربری با این فیلترها یافت نشد!**\n";
             }
-
         } catch (\Exception $e) {
             $message .= "\n❌ **خطا در اجرای کوئری:**\n" . $e->getMessage();
         }
@@ -5947,176 +5996,175 @@ private function cleanupExpiredSessions()
 
     // ==================== سیستم جدید شارژ کیف پول ====================
 
-  private function handleCharge($user, $chatId)
-{
-    // مقادیر پیشنهادی برای شارژ
-    $chargeAmounts = [
-        100000 => '💵 ۱۰۰,۰۰۰ تومان',
-        200000 => '💵 ۲۰۰,۰۰۰ تومان', 
-        500000 => '💵 ۵۰۰,۰۰۰ تومان',
-        1000000 => '💵 ۱,۰۰۰,۰۰۰ تومان'
-    ];
-    
-    $message = "💰 **شارژ کیف پول**\n\n";
-    $message .= "لطفاً یکی از مبالغ زیر را برای شارژ انتخاب کنید:\n\n";
-    
-    foreach ($chargeAmounts as $amount => $label) {
-        $message .= "{$label}\n";
-    }
-    
-    $message .= "\n⚠️ توجه: پس از انتخاب مبلغ، درخواست شما برای تأیید به مدیران ارسال می‌شود.\n";
-    $message .= "✅ پس از تأیید مدیر، مبلغ به کیف پول شما اضافه خواهد شد.";
+    private function handleCharge($user, $chatId)
+    {
+        // مقادیر پیشنهادی برای شارژ
+        $chargeAmounts = [
+            100000 => '💵 ۱۰۰,۰۰۰ تومان',
+            200000 => '💵 ۲۰۰,۰۰۰ تومان',
+            500000 => '💵 ۵۰۰,۰۰۰ تومان',
+            1000000 => '💵 ۱,۰۰۰,۰۰۰ تومان'
+        ];
 
-    // ایجاد کیبورد ثابت
-    $keyboardRows = [];
-    
-    foreach ($chargeAmounts as $amount => $label) {
-        $keyboardRows[] = [['text' => $label]];
-    }
-    
-    // دکمه بازگشت
-    $keyboardRows[] = [['text' => '🔙 بازگشت به کیف پول']];
+        $message = "💰 **شارژ کیف پول**\n\n";
+        $message .= "لطفاً یکی از مبالغ زیر را برای شارژ انتخاب کنید:\n\n";
 
-    $keyboard = [
-        'keyboard' => $keyboardRows,
-        'resize_keyboard' => true,
-        'one_time_keyboard' => false
-    ];
-
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-    
-    // تغییر state کاربر
-    $user->update(['state' => 'selecting_charge_amount']);
-}
-private function handleChargeAmountSelection($user, $chatId, $buttonText)
-{
-    // مبلغ را از دکمه استخراج می‌کنیم
-    $amountsMapping = [
-        '💵 ۱۰۰,۰۰۰ تومان' => 100000,
-        '💵 ۲۰۰,۰۰۰ تومان' => 200000,
-        '💵 ۵۰۰,۰۰۰ تومان' => 500000,
-        '💵 ۱,۰۰۰,۰۰۰ تومان' => 1000000
-    ];
-    
-    if (!isset($amountsMapping[$buttonText])) {
-        $this->telegram->sendMessage($chatId, "❌ مبلغ انتخاب شده نامعتبر است.");
-        $this->handleWallet($user, $chatId);
-        return;
-    }
-    
-    $amount = $amountsMapping[$buttonText];
-    
-    // نمایش تأیید
-    $formattedAmount = number_format($amount);
-    $message = "💰 **شارژ کیف پول**\n\n";
-    $message .= "💵 مبلغ درخواستی: {$formattedAmount} تومان\n\n";
-    $message .= "⚠️ پس از تأیید، درخواست شما برای مدیران ارسال می‌شود.\n";
-    $message .= "✅ پس از تأیید مدیر، مبلغ به کیف پول شما اضافه خواهد شد.\n\n";
-    $message .= "آیا از شارژ کیف پول به مبلغ {$formattedAmount} تومان اطمینان دارید؟";
-
-    // کیبورد ثابت برای تأیید
-    $keyboard = [
-        'keyboard' => [
-            [['text' => '✅ بله، تأیید می‌کنم']],
-            [['text' => '❌ خیر، انصراف']]
-        ],
-        'resize_keyboard' => true,
-        'one_time_keyboard' => false
-    ];
-
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-    
-    // ذخیره مبلغ انتخابی در state کاربر
-    $user->update(['state' => 'confirming_charge:' . $amount]);
-
-}
-
-
-private function handleChargeConfirmation($user, $chatId, $buttonText)
-{
-    // بررسی state کاربر
-    if (strpos($user->state, 'confirming_charge:') !== 0) {
-        $this->telegram->sendMessage($chatId, "❌ درخواست نامعتبر است.");
-        $this->handleWallet($user, $chatId);
-        return;
-    }
-    
-    // استخراج مبلغ از state
-    $amount = (int) str_replace('confirming_charge:', '', $user->state);
-    
-    if ($buttonText === '✅ بله، تأیید می‌کنم') {
-        // ایجاد درخواست پرداخت (شارژ)
-        // توجه: متد createRequest باید با type 'charge' فراخوانی شود
-        $paymentRequest = \App\Models\PaymentRequest::createRequest($user->id, null, $amount, 'charge');
-        
-        if ($paymentRequest) {
-            // ارسال پیام به مدیران با استفاده از متد موجود شما
-            $this->notifyAdminsAboutPayment($user, $paymentRequest);
-
-            $message = "✅ **درخواست شارژ کیف پول شما ثبت شد**\n\n";
-            $message .= "💵 مبلغ: " . number_format($amount) . " تومان\n";
-            $message .= "⏰ وضعیت: در انتظار تأیید مدیر\n\n";
-            $message .= "📞 پیام به مدیران ارسال شد. پس از تأیید، کیف پول شما شارژ خواهد شد.\n\n";
-            $message .= "🕐 زمان معمول تأیید: 1-2 ساعت";
-        } else {
-            $message = "❌ خطا در ثبت درخواست شارژ. لطفاً مجدد تلاش کنید.";
+        foreach ($chargeAmounts as $amount => $label) {
+            $message .= "{$label}\n";
         }
-    } else {
-        $message = "درخواست شارژ لغو شد.";
+
+        $message .= "\n⚠️ توجه: پس از انتخاب مبلغ، درخواست شما برای تأیید به مدیران ارسال می‌شود.\n";
+        $message .= "✅ پس از تأیید مدیر، مبلغ به کیف پول شما اضافه خواهد شد.";
+
+        // ایجاد کیبورد ثابت
+        $keyboardRows = [];
+
+        foreach ($chargeAmounts as $amount => $label) {
+            $keyboardRows[] = [['text' => $label]];
+        }
+
+        // دکمه بازگشت
+        $keyboardRows[] = [['text' => '🔙 بازگشت به کیف پول']];
+
+        $keyboard = [
+            'keyboard' => $keyboardRows,
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
+        ];
+
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+
+        // تغییر state کاربر
+        $user->update(['state' => 'selecting_charge_amount']);
     }
-    
-    // بازگشت به منوی کیف پول
-    $user->update(['state' => 'wallet_menu']);
-    $this->handleWallet($user, $chatId);
-    $this->telegram->sendMessage($chatId, $message);
-}
+    private function handleChargeAmountSelection($user, $chatId, $buttonText)
+    {
+        // مبلغ را از دکمه استخراج می‌کنیم
+        $amountsMapping = [
+            '💵 ۱۰۰,۰۰۰ تومان' => 100000,
+            '💵 ۲۰۰,۰۰۰ تومان' => 200000,
+            '💵 ۵۰۰,۰۰۰ تومان' => 500000,
+            '💵 ۱,۰۰۰,۰۰۰ تومان' => 1000000
+        ];
+
+        if (!isset($amountsMapping[$buttonText])) {
+            $this->telegram->sendMessage($chatId, "❌ مبلغ انتخاب شده نامعتبر است.");
+            $this->handleWallet($user, $chatId);
+            return;
+        }
+
+        $amount = $amountsMapping[$buttonText];
+
+        // نمایش تأیید
+        $formattedAmount = number_format($amount);
+        $message = "💰 **شارژ کیف پول**\n\n";
+        $message .= "💵 مبلغ درخواستی: {$formattedAmount} تومان\n\n";
+        $message .= "⚠️ پس از تأیید، درخواست شما برای مدیران ارسال می‌شود.\n";
+        $message .= "✅ پس از تأیید مدیر، مبلغ به کیف پول شما اضافه خواهد شد.\n\n";
+        $message .= "آیا از شارژ کیف پول به مبلغ {$formattedAmount} تومان اطمینان دارید؟";
+
+        // کیبورد ثابت برای تأیید
+        $keyboard = [
+            'keyboard' => [
+                [['text' => '✅ بله، تأیید می‌کنم']],
+                [['text' => '❌ خیر، انصراف']]
+            ],
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
+        ];
+
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+
+        // ذخیره مبلغ انتخابی در state کاربر
+        $user->update(['state' => 'confirming_charge:' . $amount]);
+    }
+
+
+    private function handleChargeConfirmation($user, $chatId, $buttonText)
+    {
+        // بررسی state کاربر
+        if (strpos($user->state, 'confirming_charge:') !== 0) {
+            $this->telegram->sendMessage($chatId, "❌ درخواست نامعتبر است.");
+            $this->handleWallet($user, $chatId);
+            return;
+        }
+
+        // استخراج مبلغ از state
+        $amount = (int) str_replace('confirming_charge:', '', $user->state);
+
+        if ($buttonText === '✅ بله، تأیید می‌کنم') {
+            // ایجاد درخواست پرداخت (شارژ)
+            // توجه: متد createRequest باید با type 'charge' فراخوانی شود
+            $paymentRequest = \App\Models\PaymentRequest::createRequest($user->id, null, $amount, 'charge');
+
+            if ($paymentRequest) {
+                // ارسال پیام به مدیران با استفاده از متد موجود شما
+                $this->notifyAdminsAboutPayment($user, $paymentRequest);
+
+                $message = "✅ **درخواست شارژ کیف پول شما ثبت شد**\n\n";
+                $message .= "💵 مبلغ: " . number_format($amount) . " تومان\n";
+                $message .= "⏰ وضعیت: در انتظار تأیید مدیر\n\n";
+                $message .= "📞 پیام به مدیران ارسال شد. پس از تأیید، کیف پول شما شارژ خواهد شد.\n\n";
+                $message .= "🕐 زمان معمول تأیید: 1-2 ساعت";
+            } else {
+                $message = "❌ خطا در ثبت درخواست شارژ. لطفاً مجدد تلاش کنید.";
+            }
+        } else {
+            $message = "درخواست شارژ لغو شد.";
+        }
+
+        // بازگشت به منوی کیف پول
+        $user->update(['state' => 'wallet_menu']);
+        $this->handleWallet($user, $chatId);
+        $this->telegram->sendMessage($chatId, $message);
+    }
 
     private function handlePlanSelection($user, $chatId, $buttonText)
-{
-   // دریافت اطلاعات با نوع 'plan'
-    $buttonInfo = $this->getButtonInfo($user->id, $buttonText, 'plan');
-    
-    
-       if (!$buttonInfo || !$buttonInfo->plan_id) {
-        $this->telegram->sendMessage($chatId, "❌ پلن انتخاب شده یافت نشد. لطفاً مجدداً از منوی خرید اقدام کنید.");
-        return;
-    }
+    {
+        // دریافت اطلاعات با نوع 'plan'
+        $buttonInfo = $this->getButtonInfo($user->id, $buttonText, 'plan');
 
-      $planId = $buttonInfo->plan_id;
-    $plan = \App\Models\SubscriptionPlan::find($planId);
-    
-    if (!$plan) {
-        $this->telegram->sendMessage($chatId, "❌ پلن انتخاب شده معتبر نیست.");
-        return;
-    }
 
-    // بقیه کد بدون تغییر...
-    $message = "📦 **پلن انتخاب شده:** {$plan->name}\n\n";
-    $message .= "⏰ مدت: {$plan->duration_days} روز\n";
-    $message .= "💵 مبلغ: " . number_format($plan->amount) . " تومان\n";
-    $message .= "📝 {$plan->description}\n\n";
-    
-    // بررسی موجودی کاربر
-    $wallet = $user->getWallet();
-    $message .= "💰 **موجودی فعلی شما:** " . number_format($wallet->balance) . " تومان\n\n";
-    
-    
- 
+        if (!$buttonInfo || !$buttonInfo->plan_id) {
+            $this->telegram->sendMessage($chatId, "❌ پلن انتخاب شده یافت نشد. لطفاً مجدداً از منوی خرید اقدام کنید.");
+            return;
+        }
 
-    // کیبورد اینلاین (شیشه‌ای) برای تأیید پرداخت
-    $keyboard = ['inline_keyboard' => []];
-    
-   
+        $planId = $buttonInfo->plan_id;
+        $plan = \App\Models\SubscriptionPlan::find($planId);
+
+        if (!$plan) {
+            $this->telegram->sendMessage($chatId, "❌ پلن انتخاب شده معتبر نیست.");
+            return;
+        }
+
+        // بقیه کد بدون تغییر...
+        $message = "📦 **پلن انتخاب شده:** {$plan->name}\n\n";
+        $message .= "⏰ مدت: {$plan->duration_days} روز\n";
+        $message .= "💵 مبلغ: " . number_format($plan->amount) . " تومان\n";
+        $message .= "📝 {$plan->description}\n\n";
+
+        // بررسی موجودی کاربر
+        $wallet = $user->getWallet();
+        $message .= "💰 **موجودی فعلی شما:** " . number_format($wallet->balance) . " تومان\n\n";
+
+
+
+
+        // کیبورد اینلاین (شیشه‌ای) برای تأیید پرداخت
+        $keyboard = ['inline_keyboard' => []];
+
+
         $keyboard['inline_keyboard'][] = [
             ['text' => '✅ تأیید و پرداخت', 'callback_data' => "confirm_payment:{$plan->id}"],
             ['text' => '❌ انصراف', 'callback_data' => 'cancel_payment']
         ];
-   
-      
-   
 
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
+
+
+
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+    }
 
     private function handlePaymentConfirmation($user, $chatId, $planId)
     {
@@ -6390,7 +6438,7 @@ private function handleChargeConfirmation($user, $chatId, $buttonText)
             return [];
         }
     }
-    
+
 
     private function notifyAdminsAboutPayment($user, $paymentRequest)
     {
@@ -6832,7 +6880,6 @@ private function handleChargeConfirmation($user, $chatId, $buttonText)
             }
 
             $this->telegram->sendMessage($chatId, $message);
-
         } catch (\Exception $e) {
             error_log("❌ خطا در تولید کدهای دعوت: " . $e->getMessage());
             $this->telegram->sendMessage($chatId, "❌ خطا در تولید کدهای دعوت: " . $e->getMessage());
@@ -6903,7 +6950,6 @@ private function handleChargeConfirmation($user, $chatId, $buttonText)
             $message = "✅ **نرمال‌سازی جنسیت‌ها انجام شد**\n\n";
             $message .= "🔧 {$affectedRows} رکورد به‌روزرسانی شد\n";
             $message .= "🎯 اکنون همه جنسیت‌ها به فرمت فارسی (مرد/زن) هستند";
-
         } catch (\Exception $e) {
             $message = "❌ خطا در نرمال‌سازی جنسیت‌ها: " . $e->getMessage();
         }
@@ -6917,7 +6963,7 @@ private function handleChargeConfirmation($user, $chatId, $buttonText)
     // انتهای کد موقت 
 
 
-    
+
     public function handlePhotoMessage($user, $message)
     {
         $chatId = $user->telegram_id;
@@ -6949,7 +6995,6 @@ private function handleChargeConfirmation($user, $chatId, $buttonText)
             $this->showProfile($user, $chatId);
 
             return true;
-
         } catch (\Exception $e) {
             error_log("❌ Error saving photo: " . $e->getMessage());
             $this->telegram->sendMessage($chatId, "❌ خطا در ذخیره عکس. لطفاً مجدداً تلاش کنید.");
@@ -6957,73 +7002,72 @@ private function handleChargeConfirmation($user, $chatId, $buttonText)
         }
     }
 
-  private function requestProfilePhoto($user, $chatId)
-{
-    error_log("🔄 requestProfilePhoto - Current state: " . $user->state);
-    
-    // ابتدا state را حتماً تغییر دهید
-    $user->update(['state' => 'awaiting_photo']);
-    error_log("✅ requestProfilePhoto - New state: " . $user->state);
-    
-    $message = "📸 **آپلود عکس پروفایل**\n\n";
-    $message .= "لطفاً عکس مورد نظر خود را برای پروفایل ارسال کنید.\n";
-    $message .= "⚠️ توجه: این عکس به عنوان عکس اصلی پروفایل شما ذخیره خواهد شد.";
+    private function requestProfilePhoto($user, $chatId)
+    {
+        error_log("🔄 requestProfilePhoto - Current state: " . $user->state);
 
-    $keyboard = [
-        'keyboard' => [
-            [['text' => '🔙 بازگشت به منوی اصلی']]
-        ],
-        'resize_keyboard' => true,
-        'one_time_keyboard' => false
-    ];
+        // ابتدا state را حتماً تغییر دهید
+        $user->update(['state' => 'awaiting_photo']);
+        error_log("✅ requestProfilePhoto - New state: " . $user->state);
 
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
-private function handleProfilePhotoUpload($user, $chatId, $photo)
-{
-    error_log("🔄 handleProfilePhotoUpload - Starting with state: " . $user->state);
-    
-    try {
-        // دریافت بزرگترین سایز عکس
-        $largestPhoto = end($photo);
-        $fileId = $largestPhoto['file_id'];
-        
-        error_log("📸 Photo file_id: " . $fileId);
+        $message = "📸 **آپلود عکس پروفایل**\n\n";
+        $message .= "لطفاً عکس مورد نظر خود را برای پروفایل ارسال کنید.\n";
+        $message .= "⚠️ توجه: این عکس به عنوان عکس اصلی پروفایل شما ذخیره خواهد شد.";
 
-        // 🔴 مهم: ابتدا state را بازنشانی کنید، سپس بقیه عملیات
-        $user->update(['state' => 'main_menu']);
-        error_log("✅ State reset to main_menu BEFORE processing");
+        $keyboard = [
+            'keyboard' => [
+                [['text' => '🔙 بازگشت به منوی اصلی']]
+            ],
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
+        ];
 
-        // سپس عکس را ذخیره کنید
-        $user->update([
-            'telegram_photo_id' => $fileId
-        ]);
-
-        error_log("✅ Photo saved to database");
-
-        $this->telegram->sendMessage($chatId, "✅ عکس پروفایل شما با موفقیت آپلود شد!");
-        
-        // بازگشت به منوی اصلی
-        $this->showMainMenu($user, $chatId);
-
-    } catch (\Exception $e) {
-        error_log("❌ Error in handleProfilePhotoUpload: " . $e->getMessage());
-        
-        // حتی در صورت خطا هم state را بازنشانی کنید
-        $user->update(['state' => 'main_menu']);
-        error_log("✅ State reset to main_menu after error");
-        
-        $this->telegram->sendMessage($chatId, "❌ خطا در آپلود عکس. لطفاً مجدداً تلاش کنید.");
-        $this->showMainMenu($user, $chatId);
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
     }
-}
+    private function handleProfilePhotoUpload($user, $chatId, $photo)
+    {
+        error_log("🔄 handleProfilePhotoUpload - Starting with state: " . $user->state);
+
+        try {
+            // دریافت بزرگترین سایز عکس
+            $largestPhoto = end($photo);
+            $fileId = $largestPhoto['file_id'];
+
+            error_log("📸 Photo file_id: " . $fileId);
+
+            // 🔴 مهم: ابتدا state را بازنشانی کنید، سپس بقیه عملیات
+            $user->update(['state' => 'main_menu']);
+            error_log("✅ State reset to main_menu BEFORE processing");
+
+            // سپس عکس را ذخیره کنید
+            $user->update([
+                'telegram_photo_id' => $fileId
+            ]);
+
+            error_log("✅ Photo saved to database");
+
+            $this->telegram->sendMessage($chatId, "✅ عکس پروفایل شما با موفقیت آپلود شد!");
+
+            // بازگشت به منوی اصلی
+            $this->showMainMenu($user, $chatId);
+        } catch (\Exception $e) {
+            error_log("❌ Error in handleProfilePhotoUpload: " . $e->getMessage());
+
+            // حتی در صورت خطا هم state را بازنشانی کنید
+            $user->update(['state' => 'main_menu']);
+            error_log("✅ State reset to main_menu after error");
+
+            $this->telegram->sendMessage($chatId, "❌ خطا در آپلود عکس. لطفاً مجدداً تلاش کنید.");
+            $this->showMainMenu($user, $chatId);
+        }
+    }
     private function getBotToken()
     {
         return $_ENV['TELEGRAM_BOT_TOKEN'] ?? '8309595970:AAGaX8wstn-Fby_IzF5cU_a1CxGCPfCEQNk';
     }
 
 
-    
+
 
 
     private function showProfileMenu($user, $chatId = null)
@@ -7063,12 +7107,12 @@ private function handleProfilePhotoUpload($user, $chatId, $photo)
         $this->sendMessage($targetChatId, $message, null, $replyMarkup);
     }
 
-   
-   
 
-  
-    
-  
+
+
+
+
+
     /**
      * ارسال پیام به کاربر
      */
@@ -7116,7 +7160,6 @@ private function handleProfilePhotoUpload($user, $chatId, $photo)
             }
 
             return $response;
-
         } catch (Exception $e) {
             error_log("sendMessage error: " . $e->getMessage());
             return false;
@@ -7136,7 +7179,6 @@ private function handleProfilePhotoUpload($user, $chatId, $photo)
 
             echo "✅ User state updated to: $state - Result: " . ($result ? "SUCCESS" : "FAILED") . "\n";
             return $result;
-
         } catch (\Exception $e) {
             echo "❌ Error updating user state: " . $e->getMessage() . "\n";
             return false;
@@ -7162,7 +7204,6 @@ private function handleProfilePhotoUpload($user, $chatId, $photo)
                 return $user;
             }
             return null;
-
         } catch (\Exception $e) {
             error_log("Error finding user: " . $e->getMessage());
             return null;
@@ -7207,13 +7248,13 @@ private function handleProfilePhotoUpload($user, $chatId, $photo)
 
             default:
                 $this->sendMessage($chatId, "لطفاً یکی از گزینه‌های منو را انتخاب کنید.");
-               // $this->showPhotoManagementMenu($user, $chatId);
+                // $this->showPhotoManagementMenu($user, $chatId);
                 break;
         }
 
         return true;
     }
-    
+
     private function getLastUpdateId()
     {
         $filePath = __DIR__ . '/../../storage/last_update_id.txt';
@@ -7329,914 +7370,1283 @@ private function handleProfilePhotoUpload($user, $chatId, $photo)
 
             error_log("✅ Health check passed");
             $this->lastHealthCheck = time();
-
         } catch (Exception $e) {
             error_log("🚨 HEALTH CHECK ERROR: " . $e->getMessage());
         }
     }
     private function setUserState($userId, $state)
-{
-    $pdo = $this->getPDO();
-    
-    try {
-        $sql = "INSERT INTO user_states (user_id, state, updated_at) 
+    {
+        $pdo = $this->getPDO();
+
+        try {
+            $sql = "INSERT INTO user_states (user_id, state, updated_at) 
                 VALUES (?, ?, NOW()) 
                 ON DUPLICATE KEY UPDATE 
                 state = VALUES(state), 
                 updated_at = VALUES(updated_at)";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$userId, $state]);
-        return true;
-    } catch (\Exception $e) {
-        error_log("❌ Error in setUserState: " . $e->getMessage());
-        return false;
-    }
-}
 
-/**
- * دریافت وضعیت کاربر
- */
-private function getUserState($userId)
-{
-    $pdo = $this->getPDO();
-    
-    try {
-        $sql = "SELECT state FROM user_states WHERE user_id = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$userId]);
-        $result = $stmt->fetch(\PDO::FETCH_OBJ);
-        
-        return $result ? $result->state : null;
-    } catch (\Exception $e) {
-        error_log("❌ Error in getUserState: " . $e->getMessage());
-        return null;
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$userId, $state]);
+            return true;
+        } catch (\Exception $e) {
+            error_log("❌ Error in setUserState: " . $e->getMessage());
+            return false;
+        }
     }
-}
 
-/**
- * پاک کردن وضعیت کاربر
- */
-private function clearUserState($userId)
-{
-    $pdo = $this->getPDO();
-    
-    try {
-        $sql = "DELETE FROM user_states WHERE user_id = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$userId]);
-        return true;
-    } catch (\Exception $e) {
-        error_log("❌ Error in clearUserState: " . $e->getMessage());
-        return false;
+    /**
+     * دریافت وضعیت کاربر
+     */
+    private function getUserState($userId)
+    {
+        $pdo = $this->getPDO();
+
+        try {
+            $sql = "SELECT state FROM user_states WHERE user_id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$userId]);
+            $result = $stmt->fetch(\PDO::FETCH_OBJ);
+
+            return $result ? $result->state : null;
+        } catch (\Exception $e) {
+            error_log("❌ Error in getUserState: " . $e->getMessage());
+            return null;
+        }
     }
-}
-// در کلاس BotCore.php
-private function handleDeactivateRequest($user, $chatId)
-{
-    // نمایش گزینه‌های دلیل غیرفعال سازی
-    $keyboard = [
-        ['⏸️ غیرفعال سازی موقت - مسافرت'],
-        ['⏸️ غیرفعال سازی موقت - مشغله کاری'],
-        ['⏸️ غیرفعال سازی موقت - استراحت'],
-        ['🔙 بازگشت به منوی اصلی']
-    ];
-    
-    $message = "⏸️ غیرفعال سازی موقت حساب\n\n";
-    $message .= "در این حالت:\n";
-    $message .= "• شما به دیگران پیشنهاد داده نمی‌شوید\n";
-    $message .= "• شما پیشنهادی دریافت نمی‌کنید\n";
-    $message .= "• تمام اطلاعات و سوابق شما حفظ می‌شود\n";
-    $message .= "• هر زمان می‌توانید حساب را فعال کنید\n\n";
-    $message .= "لطفاً دلیل غیرفعال سازی را انتخاب کنید:";
-    
-    $this->sendMessage($chatId, $message, $keyboard);
-    $this->updateUserState($user->telegram_id, 'awaiting_deactivation_reason');
-}
 
-private function handleActivateRequest($user, $chatId)
-{
-    if ($user->is_active) {
-        $this->sendMessage($chatId, "✅ حساب شما در حال حاضر فعال است.");
-        return;
+    /**
+     * پاک کردن وضعیت کاربر
+     */
+    private function clearUserState($userId)
+    {
+        $pdo = $this->getPDO();
+
+        try {
+            $sql = "DELETE FROM user_states WHERE user_id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$userId]);
+            return true;
+        } catch (\Exception $e) {
+            error_log("❌ Error in clearUserState: " . $e->getMessage());
+            return false;
+        }
     }
-    
-    if ($this->activateUser($user->telegram_id)) {
-        $message = "✅ حساب شما با موفقیت فعال شد!\n\n";
-        $message .= "از این به بعد:\n";
-        $message .= "• شما در جستجوی دیگران ظاهر می‌شوید\n";
-        $message .= "• شما پیشنهادات جدید دریافت خواهید کرد\n";
-        $message .= "• می‌توانید به جستجوی افراد بپردازید";
-        
-        $this->sendMessage($chatId, $message);
-    } else {
-        $this->sendMessage($chatId, "❌ خطا در فعال سازی حساب. لطفاً دوباره تلاش کنید.");
-    }
-    
-    $this->showMainMenu($user, $chatId);
-}
+    // در کلاس BotCore.php
+    private function handleDeactivateRequest($user, $chatId)
+    {
+        // نمایش گزینه‌های دلیل غیرفعال سازی
+        $keyboard = [
+            ['⏸️ غیرفعال سازی موقت - مسافرت'],
+            ['⏸️ غیرفعال سازی موقت - مشغله کاری'],
+            ['⏸️ غیرفعال سازی موقت - استراحت'],
+            ['🔙 بازگشت به منوی اصلی']
+        ];
 
-
-private function handleDeactivationConfirmation($user, $chatId, $reason)
-{
-    if ($this->deactivateUser($user->telegram_id, $reason)) {
-        $message = "✅ حساب شما با موفقیت غیرفعال شد\n\n";
-        $message .= "📝 دلیل: $reason\n\n";
+        $message = "⏸️ غیرفعال سازی موقت حساب\n\n";
         $message .= "در این حالت:\n";
         $message .= "• شما به دیگران پیشنهاد داده نمی‌شوید\n";
         $message .= "• شما پیشنهادی دریافت نمی‌کنید\n";
-        $message .= "• تمام اطلاعات شما حفظ شده است\n\n";
-        $message .= "هر زمان که مایل بودید می‌توانید از منوی اصلی حساب را فعال کنید.";
-        
-        $this->sendMessage($chatId, $message);
-    } else {
-        $this->sendMessage($chatId, "❌ خطا در غیرفعال سازی حساب. لطفاً دوباره تلاش کنید.");
-    }
-    
-    $this->showMainMenu($user, $chatId);
-}
-// متدهای کمکی برای فعال/غیرفعال کردن کاربر
-private function activateUser($telegramId)
-{
-    try {
-        $pdo = $this->getPDO();
-        $sql = "UPDATE users SET is_active = 1, deactivation_reason = NULL, deactivated_at = NULL WHERE telegram_id = ?";
-        $stmt = $pdo->prepare($sql);
-        return $stmt->execute([$telegramId]);
-    } catch (\Exception $e) {
-        error_log("Error activating user: " . $e->getMessage());
-        return false;
-    }
-}
+        $message .= "• تمام اطلاعات و سوابق شما حفظ می‌شود\n";
+        $message .= "• هر زمان می‌توانید حساب را فعال کنید\n\n";
+        $message .= "لطفاً دلیل غیرفعال سازی را انتخاب کنید:";
 
-private function deactivateUser($telegramId, $reason = 'موقت')
-{
-    try {
-        $pdo = $this->getPDO();
-        $sql = "UPDATE users SET is_active = 0, deactivation_reason = ?, deactivated_at = NOW() WHERE telegram_id = ?";
-        $stmt = $pdo->prepare($sql);
-        return $stmt->execute([$reason, $telegramId]);
-    } catch (\Exception $e) {
-        error_log("Error deactivating user: " . $e->getMessage());
-        return false;
+        $this->sendMessage($chatId, $message, $keyboard);
+        $this->updateUserState($user->telegram_id, 'awaiting_deactivation_reason');
     }
-}
 
-// و متد getStatusInfo را در BotCore پیاده‌سازی کنید:
-private function getUserStatusInfo($user)
-{
-    if ($user->is_active) {
-        return "🟢 حساب شما فعال است";
-    } else {
-        $reason = $user->deactivation_reason ?? 'موقت';
-        $date = $user->deactivated_at ? date('Y-m-d H:i', strtotime($user->deactivated_at)) : 'نامشخص';
-        return "🔴 حساب شما غیرفعال است\n📅 از تاریخ: $date\n📝 دلیل: $reason";
-    }
-}
+    private function handleActivateRequest($user, $chatId)
+    {
+        if ($user->is_active) {
+            $this->sendMessage($chatId, "✅ حساب شما در حال حاضر فعال است.");
+            return;
+        }
 
-private function handleLikeAction($user, $likedUserId, $callbackQuery)
-{
-    $callbackQueryId = $callbackQuery['id'] ?? null;
-    
-    if (!$callbackQueryId) {
-        error_log("❌ callback_query_id not found in callbackQuery array");
-        return;
+        if ($this->activateUser($user->telegram_id)) {
+            $message = "✅ حساب شما با موفقیت فعال شد!\n\n";
+            $message .= "از این به بعد:\n";
+            $message .= "• شما در جستجوی دیگران ظاهر می‌شوید\n";
+            $message .= "• شما پیشنهادات جدید دریافت خواهید کرد\n";
+            $message .= "• می‌توانید به جستجوی افراد بپردازید";
+
+            $this->sendMessage($chatId, $message);
+        } else {
+            $this->sendMessage($chatId, "❌ خطا در فعال سازی حساب. لطفاً دوباره تلاش کنید.");
+        }
+
+        $this->showMainMenu($user, $chatId);
     }
-    
-    // 🔴 نکته مهم: $likedUserId که از callback_data دریافت می‌شود، باید id کاربر باشد (نه telegram_id)
-    // در showSuggestion داریم: "like:{$suggestedUser->id}" که id است
-    
-    // پیدا کردن کاربر لایک‌شونده با استفاده از id
-    $likedUser = \App\Models\User::find($likedUserId);
-    if (!$likedUser) {
-        $this->telegram->answerCallbackQuery($callbackQueryId, [
-            'text' => "کاربر مورد نظر یافت نشد!",
-            'show_alert' => false
+
+
+    private function handleDeactivationConfirmation($user, $chatId, $reason)
+    {
+        if ($this->deactivateUser($user->telegram_id, $reason)) {
+            $message = "✅ حساب شما با موفقیت غیرفعال شد\n\n";
+            $message .= "📝 دلیل: $reason\n\n";
+            $message .= "در این حالت:\n";
+            $message .= "• شما به دیگران پیشنهاد داده نمی‌شوید\n";
+            $message .= "• شما پیشنهادی دریافت نمی‌کنید\n";
+            $message .= "• تمام اطلاعات شما حفظ شده است\n\n";
+            $message .= "هر زمان که مایل بودید می‌توانید از منوی اصلی حساب را فعال کنید.";
+
+            $this->sendMessage($chatId, $message);
+        } else {
+            $this->sendMessage($chatId, "❌ خطا در غیرفعال سازی حساب. لطفاً دوباره تلاش کنید.");
+        }
+
+        $this->showMainMenu($user, $chatId);
+    }
+    // متدهای کمکی برای فعال/غیرفعال کردن کاربر
+    private function activateUser($telegramId)
+    {
+        try {
+            $pdo = $this->getPDO();
+            $sql = "UPDATE users SET is_active = 1, deactivation_reason = NULL, deactivated_at = NULL WHERE telegram_id = ?";
+            $stmt = $pdo->prepare($sql);
+            return $stmt->execute([$telegramId]);
+        } catch (\Exception $e) {
+            error_log("Error activating user: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    private function deactivateUser($telegramId, $reason = 'موقت')
+    {
+        try {
+            $pdo = $this->getPDO();
+            $sql = "UPDATE users SET is_active = 0, deactivation_reason = ?, deactivated_at = NOW() WHERE telegram_id = ?";
+            $stmt = $pdo->prepare($sql);
+            return $stmt->execute([$reason, $telegramId]);
+        } catch (\Exception $e) {
+            error_log("Error deactivating user: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    // و متد getStatusInfo را در BotCore پیاده‌سازی کنید:
+    private function getUserStatusInfo($user)
+    {
+        if ($user->is_active) {
+            return "🟢 حساب شما فعال است";
+        } else {
+            $reason = $user->deactivation_reason ?? 'موقت';
+            $date = $user->deactivated_at ? date('Y-m-d H:i', strtotime($user->deactivated_at)) : 'نامشخص';
+            return "🔴 حساب شما غیرفعال است\n📅 از تاریخ: $date\n📝 دلیل: $reason";
+        }
+    }
+
+    private function handleLikeAction($user, $likedUserId, $callbackQuery)
+    {
+        $callbackQueryId = $callbackQuery['id'] ?? null;
+
+        if (!$callbackQueryId) {
+            error_log("❌ callback_query_id not found in callbackQuery array");
+            return;
+        }
+
+        // 🔴 نکته مهم: $likedUserId که از callback_data دریافت می‌شود، باید id کاربر باشد (نه telegram_id)
+        // در showSuggestion داریم: "like:{$suggestedUser->id}" که id است
+
+        // پیدا کردن کاربر لایک‌شونده با استفاده از id
+        $likedUser = \App\Models\User::find($likedUserId);
+        if (!$likedUser) {
+            $this->telegram->answerCallbackQuery($callbackQueryId, [
+                'text' => "کاربر مورد نظر یافت نشد!",
+                'show_alert' => false
+            ]);
+            return;
+        }
+
+        // 🔴 استفاده از id کاربران (نه telegram_id)
+        $likerId = $user->id;  // id کاربر لایک‌کننده
+        $likedId = $likedUser->id;  // id کاربر لایک‌شونده
+
+        // بررسی آیا قبلاً لایک کرده
+        if (\App\Models\Like::hasLiked($likerId, $likedId)) {
+            $this->telegram->answerCallbackQuery($callbackQueryId, [
+                'text' => "شما قبلاً این کاربر را لایک کرده‌اید!",
+                'show_alert' => false
+            ]);
+            return;
+        }
+
+        // ذخیره لایک با استفاده از id کاربران
+        $like = \App\Models\Like::create([
+            'liker_id' => $likerId,  // id کاربر لایک‌کننده
+            'liked_id' => $likedId,  // id کاربر لایک‌شونده
+            'viewed' => 0,
+            'mutual' => 0
         ]);
-        return;
-    }
-    
-    // 🔴 استفاده از id کاربران (نه telegram_id)
-    $likerId = $user->id;  // id کاربر لایک‌کننده
-    $likedId = $likedUser->id;  // id کاربر لایک‌شونده
-    
-    // بررسی آیا قبلاً لایک کرده
-    if (\App\Models\Like::hasLiked($likerId, $likedId)) {
+
+        // بررسی لایک متقابل
+        $isMutual = \App\Models\Like::checkAndMarkMutual($likerId, $likedId);
+
+        if ($isMutual) {
+            $responseText = "🎉 لایک متقابل! این کاربر هم شما را لایک کرده بود!";
+            $showAlert = true;
+
+            $this->notifyMutualLike($likerId, $likedId);
+        } else {
+            $responseText = "❤️ لایک شما ثبت شد!";
+            $showAlert = false;
+
+            $this->sendLikeNotification($likerId, $likedId);
+        }
+
+        // پاسخ به callback
         $this->telegram->answerCallbackQuery($callbackQueryId, [
-            'text' => "شما قبلاً این کاربر را لایک کرده‌اید!",
-            'show_alert' => false
+            'text' => $responseText,
+            'show_alert' => $showAlert
         ]);
-        return;
     }
 
-    // ذخیره لایک با استفاده از id کاربران
-    $like = \App\Models\Like::create([
-        'liker_id' => $likerId,  // id کاربر لایک‌کننده
-        'liked_id' => $likedId,  // id کاربر لایک‌شونده
-        'viewed' => 0,
-        'mutual' => 0
-    ]);
+    private function sendLikeNotification($likerId, $likedUserId)
+    {
+        $liker = \App\Models\User::find($likerId);
+        $likedUser = \App\Models\User::find($likedUserId);
 
-    // بررسی لایک متقابل
-    $isMutual = \App\Models\Like::checkAndMarkMutual($likerId, $likedId);
+        if (!$liker || !$likedUser) {
+            return;
+        }
 
-    if ($isMutual) {
-        $responseText = "🎉 لایک متقابل! این کاربر هم شما را لایک کرده بود!";
-        $showAlert = true;
-        
-        $this->notifyMutualLike($likerId, $likedId);
-    } else {
-        $responseText = "❤️ لایک شما ثبت شد!";
-        $showAlert = false;
-        
-        $this->sendLikeNotification($likerId, $likedId);
-    }
+        $message = "🎉 **شما یک لایک جدید دارید!**\n\n";
+        $message .= "👤 کاربر جدیدی شما را پسندید:\n\n";
+        $message .= "📛 نام: {$liker->first_name}\n";
 
-    // پاسخ به callback
-    $this->telegram->answerCallbackQuery($callbackQueryId, [
-        'text' => $responseText,
-        'show_alert' => $showAlert
-    ]);
-}
+        if ($liker->age) {
+            $message .= "📅 سن: {$liker->age}\n";
+        }
 
-private function sendLikeNotification($likerId, $likedUserId)
-{
-    $liker = \App\Models\User::find($likerId);
-    $likedUser = \App\Models\User::find($likedUserId);
-    
-    if (!$liker || !$likedUser) {
-        return;
-    }
-    
-    $message = "🎉 **شما یک لایک جدید دارید!**\n\n";
-    $message .= "👤 کاربر جدیدی شما را پسندید:\n\n";
-    $message .= "📛 نام: {$liker->first_name}\n";
-    
-    if ($liker->age) {
-        $message .= "📅 سن: {$liker->age}\n";
-    }
-    
-    if ($liker->city) {
-        $message .= "🏙️ شهر: {$liker->city}\n";
-    }
-    
-    $message .= "\nبرای مشاهده کامل پروفایل، روی دکمه زیر کلیک کنید:";
-    
-    // 🔴 استفاده از view_liker: برای هماهنگی با handler موجود
-    $inlineKeyboard = [
-        'inline_keyboard' => [
-            [
-                ['text' => '👀 مشاهده پروفایل', 'callback_data' => "view_liker:{$likerId}"]
+        if ($liker->city) {
+            $message .= "🏙️ شهر: {$liker->city}\n";
+        }
+
+        $message .= "\nبرای مشاهده کامل پروفایل، روی دکمه زیر کلیک کنید:";
+
+        // 🔴 استفاده از view_liker: برای هماهنگی با handler موجود
+        $inlineKeyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => '👀 مشاهده پروفایل', 'callback_data' => "view_liker:{$likerId}"]
+                ]
             ]
-        ]
-    ];
-    
-    try {
-        $this->telegram->sendMessage($likedUser->telegram_id, $message, $inlineKeyboard);
-        
-        // علامت زدن لایک به عنوان ارسال شده
-        \App\Models\Like::markAsViewed($likerId, $likedUserId);
-        
-    } catch (\Exception $e) {
-        error_log("❌ ارسال نوتیفیکیشن لایک: " . $e->getMessage());
-    }
-}
+        ];
 
-private function notifyMutualLike($userAId, $userBId)
-{
-    $userA = \App\Models\User::find($userAId);
-    $userB = \App\Models\User::find($userBId);
-    
-    if (!$userA || !$userB) {
-        return;
-    }
-    
-    $message = "🎉 **لایک متقابل!**\n\n";
-    $message .= "🤝 شما و کاربر دیگری همدیگر را لایک کردید!\n\n";
-    $message .= "✅ اکنون می‌توانید از طریق ربات با هم در ارتباط باشید.";
-    
-    // ارسال به هر دو کاربر
-    $this->telegram->sendMessage($userA->telegram_id, $message);
-    $this->telegram->sendMessage($userB->telegram_id, $message);
-}
+        try {
+            $this->telegram->sendMessage($likedUser->telegram_id, $message, $inlineKeyboard);
 
-// 🔹 نمایش لیست لایک‌کنندگان
-private function showLikerProfile($user, $chatId, $likerId)
-{
-    // پیدا کردن کاربر لایک‌کننده
-    $liker = \App\Models\User::find($likerId);
-    
-    if (!$liker) {
-        $this->telegram->sendMessage($chatId, "❌ کاربر مورد نظر یافت نشد.");
-        return;
+            // علامت زدن لایک به عنوان ارسال شده
+            \App\Models\Like::markAsViewed($likerId, $likedUserId);
+        } catch (\Exception $e) {
+            error_log("❌ ارسال نوتیفیکیشن لایک: " . $e->getMessage());
+        }
     }
-    
-    // نمایش پیام تأیید
-    $this->telegram->sendMessage($chatId, "🔍 در حال بارگذاری پروفایل کاربر...");
-    
-    // استفاده از متد showSuggestion موجود برای نمایش پروفایل
-    // این متد هم دکمه لایک و هم دکمه درخواست اطلاعات تماس را نمایش می‌دهد
-    $this->showSuggestion($user, $chatId, $liker);
-    
-    // آپدیت وضعیت کاربر
-    $user->update(['state' => 'viewing_liker:' . $likerId]);
-}
 
-private function handleSubscription($user, $chatId)
-{
-    $plans = \App\Models\SubscriptionPlan::getActivePlans();
-    
-    if ($plans->isEmpty()) {
-        $this->telegram->sendMessage($chatId, "⚠️ در حال حاضر پلن اشتراکی فعالی وجود ندارد.");
-        return;
+    private function notifyMutualLike($userAId, $userBId)
+    {
+        $userA = \App\Models\User::find($userAId);
+        $userB = \App\Models\User::find($userBId);
+
+        if (!$userA || !$userB) {
+            return;
+        }
+
+        $message = "🎉 **لایک متقابل!**\n\n";
+        $message .= "🤝 شما و کاربر دیگری همدیگر را لایک کردید!\n\n";
+        $message .= "✅ اکنون می‌توانید از طریق ربات با هم در ارتباط باشید.";
+
+        // ارسال به هر دو کاربر
+        $this->telegram->sendMessage($userA->telegram_id, $message);
+        $this->telegram->sendMessage($userB->telegram_id, $message);
     }
-    
-    $message = "📋 **لیست پلن‌های اشتراک:**\n\n";
-    
-    foreach ($plans as $plan) {
-        $message .= "🔸 **{$plan->name}**\n";
+
+    // 🔹 نمایش لیست لایک‌کنندگان
+    private function showLikerProfile($user, $chatId, $likerId)
+    {
+        // پیدا کردن کاربر لایک‌کننده
+        $liker = \App\Models\User::find($likerId);
+
+        if (!$liker) {
+            $this->telegram->sendMessage($chatId, "❌ کاربر مورد نظر یافت نشد.");
+            return;
+        }
+
+        // نمایش پیام تأیید
+        $this->telegram->sendMessage($chatId, "🔍 در حال بارگذاری پروفایل کاربر...");
+
+        // استفاده از متد showSuggestion موجود برای نمایش پروفایل
+        // این متد هم دکمه لایک و هم دکمه درخواست اطلاعات تماس را نمایش می‌دهد
+        $this->showSuggestion($user, $chatId, $liker);
+
+        // آپدیت وضعیت کاربر
+        $user->update(['state' => 'viewing_liker:' . $likerId]);
+    }
+
+    private function handleSubscription($user, $chatId)
+    {
+        $plans = \App\Models\SubscriptionPlan::getActivePlans();
+
+        if ($plans->isEmpty()) {
+            $this->telegram->sendMessage($chatId, "⚠️ در حال حاضر پلن اشتراکی فعالی وجود ندارد.");
+            return;
+        }
+
+        $message = "📋 **لیست پلن‌های اشتراک:**\n\n";
+
+        foreach ($plans as $plan) {
+            $message .= "🔸 **{$plan->name}**\n";
+            $message .= "💰 قیمت: " . number_format($plan->price) . " تومان\n";
+            $message .= "⏳ مدت: {$plan->duration_days} روز\n";
+            $message .= "📞 درخواست تماس روزانه: {$plan->max_daily_contacts}\n";
+            $message .= "📞 درخواست تماس کل: {$plan->total_contacts}\n";
+            $message .= "👥 پیشنهادات روزانه: {$plan->max_daily_suggestions}\n";
+            $message .= "👥 پیشنهادات کل: {$plan->total_suggestions}\n";
+            $message .= "────────────\n";
+        }
+
+        $message .= "\nبرای خرید هر پلن، روی دکمه مربوطه کلیک کنید:";
+
+        // ایجاد کیبورد ثابت
+        $keyboardRows = [];
+
+        foreach ($plans as $plan) {
+            $label = "💎 {$plan->name}";
+            $keyboardRows[] = [['text' => $label]];
+        }
+
+        $keyboardRows[] = [['text' => '🔙 بازگشت']];
+
+        $keyboard = [
+            'keyboard' => $keyboardRows,
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false
+        ];
+
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+
+        // تنظیم state
+        $user->update(['state' => 'selecting_subscription_plan']);
+    }
+
+    private function handleSubscriptionPlanSelection($user, $chatId, $buttonText)
+    {
+        // استخراج نام پلن از دکمه (مثلاً "💎 پایه")
+        $planName = str_replace('💎 ', '', $buttonText);
+
+        $plan = \App\Models\SubscriptionPlan::where('name', $planName)->first();
+
+        if (!$plan) {
+            $this->telegram->sendMessage($chatId, "❌ پلن انتخابی یافت نشد.");
+            $this->handleSubscription($user, $chatId);
+            return;
+        }
+
+        // بررسی موجودی کیف پول
+        $wallet = $user->getWallet();
+
+        $message = "💎 **پلن انتخابی:** {$plan->name}\n\n";
         $message .= "💰 قیمت: " . number_format($plan->price) . " تومان\n";
         $message .= "⏳ مدت: {$plan->duration_days} روز\n";
         $message .= "📞 درخواست تماس روزانه: {$plan->max_daily_contacts}\n";
         $message .= "📞 درخواست تماس کل: {$plan->total_contacts}\n";
         $message .= "👥 پیشنهادات روزانه: {$plan->max_daily_suggestions}\n";
         $message .= "👥 پیشنهادات کل: {$plan->total_suggestions}\n";
-        $message .= "────────────\n";
-    }
-    
-    $message .= "\nبرای خرید هر پلن، روی دکمه مربوطه کلیک کنید:";
-    
-    // ایجاد کیبورد ثابت
-    $keyboardRows = [];
-    
-    foreach ($plans as $plan) {
-        $label = "💎 {$plan->name}";
-        $keyboardRows[] = [['text' => $label]];
-    }
-    
-    $keyboardRows[] = [['text' => '🔙 بازگشت']];
+        $message .= "📝 {$plan->description}\n\n";
 
-    $keyboard = [
-        'keyboard' => $keyboardRows,
-        'resize_keyboard' => true,
-        'one_time_keyboard' => false
-    ];
+        $message .= "💰 **موجودی فعلی شما:** " . number_format($wallet->balance) . " تومان\n\n";
 
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-    
-    // تنظیم state
-    $user->update(['state' => 'selecting_subscription_plan']);
-}
-
-private function handleSubscriptionPlanSelection($user, $chatId, $buttonText)
-{
-    // استخراج نام پلن از دکمه (مثلاً "💎 پایه")
-    $planName = str_replace('💎 ', '', $buttonText);
-    
-    $plan = \App\Models\SubscriptionPlan::where('name', $planName)->first();
-    
-    if (!$plan) {
-        $this->telegram->sendMessage($chatId, "❌ پلن انتخابی یافت نشد.");
-        $this->handleSubscription($user, $chatId);
-        return;
-    }
-    
-    // بررسی موجودی کیف پول
-    $wallet = $user->getWallet();
-    
-    $message = "💎 **پلن انتخابی:** {$plan->name}\n\n";
-    $message .= "💰 قیمت: " . number_format($plan->price) . " تومان\n";
-    $message .= "⏳ مدت: {$plan->duration_days} روز\n";
-    $message .= "📞 درخواست تماس روزانه: {$plan->max_daily_contacts}\n";
-    $message .= "📞 درخواست تماس کل: {$plan->total_contacts}\n";
-    $message .= "👥 پیشنهادات روزانه: {$plan->max_daily_suggestions}\n";
-    $message .= "👥 پیشنهادات کل: {$plan->total_suggestions}\n";
-    $message .= "📝 {$plan->description}\n\n";
-    
-    $message .= "💰 **موجودی فعلی شما:** " . number_format($wallet->balance) . " تومان\n\n";
-    
-    if ($wallet->balance < $plan->price) {
-        $message .= "❌ موجودی کیف پول شما کافی نیست!\n";
-        $message .= "💵 برای شارژ کیف پول، از منوی کیف پول استفاده کنید.";
-        
-        $keyboard = [
-            'keyboard' => [
-                [['text' => '💼 کیف پول']],
-                [['text' => '🔙 بازگشت']]
-            ],
-            'resize_keyboard' => true
-        ];
-    } else {
-        $message .= "آیا مایل به خرید این اشتراک هستید؟";
-        
-        $keyboard = [
-            'keyboard' => [
-                [['text' => '✅ بله، خرید می‌کنم']],
-                [['text' => '❌ خیر، انصراف']]
-            ],
-            'resize_keyboard' => true
-        ];
-    }
-    
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-    
-    // ذخیره plan_id در state
-    $user->update(['state' => 'confirming_subscription:' . $plan->id]);
-}
-private function handleSubscriptionConfirmation($user, $chatId, $buttonText)
-{
-    // بررسی state کاربر
-    if (strpos($user->state, 'confirming_subscription:') !== 0) {
-        $this->telegram->sendMessage($chatId, "❌ درخواست نامعتبر است.");
-        $this->showMainMenu($user, $chatId);
-        return;
-    }
-    
-    // استخراج plan_id از state
-    $planId = (int) str_replace('confirming_subscription:', '', $user->state);
-    $plan = \App\Models\SubscriptionPlan::find($planId);
-    
-    if (!$plan) {
-        $this->telegram->sendMessage($chatId, "❌ پلن انتخابی یافت نشد.");
-        $this->showMainMenu($user, $chatId);
-        return;
-    }
-    
-    if ($buttonText === '✅ بله، خرید می‌کنم') {
-        $wallet = $user->getWallet();
-        
-        // بررسی مجدد موجودی
         if ($wallet->balance < $plan->price) {
-            $this->telegram->sendMessage($chatId, "❌ موجودی کیف پول شما کافی نیست!");
-            $this->handleWallet($user, $chatId);
+            $message .= "❌ موجودی کیف پول شما کافی نیست!\n";
+            $message .= "💵 برای شارژ کیف پول، از منوی کیف پول استفاده کنید.";
+
+            $keyboard = [
+                'keyboard' => [
+                    [['text' => '💼 کیف پول']],
+                    [['text' => '🔙 بازگشت']]
+                ],
+                'resize_keyboard' => true
+            ];
+        } else {
+            $message .= "آیا مایل به خرید این اشتراک هستید؟";
+
+            $keyboard = [
+                'keyboard' => [
+                    [['text' => '✅ بله، خرید می‌کنم']],
+                    [['text' => '❌ خیر، انصراف']]
+                ],
+                'resize_keyboard' => true
+            ];
+        }
+
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+
+        // ذخیره plan_id در state
+        $user->update(['state' => 'confirming_subscription:' . $plan->id]);
+    }
+    private function handleSubscriptionConfirmation($user, $chatId, $buttonText)
+    {
+        // بررسی state کاربر
+        if (strpos($user->state, 'confirming_subscription:') !== 0) {
+            $this->telegram->sendMessage($chatId, "❌ درخواست نامعتبر است.");
+            $this->showMainMenu($user, $chatId);
             return;
         }
-        
-        // کسر از کیف پول
-        $wallet->decrement('balance', $plan->price);
-        
-        // غیرفعال کردن اشتراک قبلی (اگر وجود دارد)
-        \App\Models\UserSubscription::where('user_id', $user->id)
-            ->where('status', 'active')
-            ->update(['status' => 'expired']);
-        
-        // ایجاد اشتراک جدید
-        $expiryDate = \Carbon\Carbon::now()->addDays($plan->duration_days);
-    
-        $subscription = \App\Models\UserSubscription::create([
-            'user_id' => $user->id,
-            'plan_id' => $plan->id,
-            'start_date' => \Carbon\Carbon::now(),
-            'expiry_date' => $expiryDate,
-            'status' => 'active',
-            'remaining_daily_contacts' => $plan->max_daily_contacts,
-            'remaining_total_contacts' => $plan->total_contacts,
-            'remaining_daily_suggestions' => $plan->max_daily_suggestions,
-            'remaining_total_suggestions' => $plan->total_suggestions,
-            'last_reset_date' => \Carbon\Carbon::now()
-        ]);
-        
-        // ✅ **ثبت تراکنش خرید اشتراک**
-        \App\Models\Transaction::create([
-            'user_id' => $user->id,
-            'type' => 'subscription_purchase', // نوع جدید
-            'amount' => -$plan->price, // منفی چون کسر می‌شود
-            'description' => "خرید اشتراک {$plan->name} ({$plan->duration_days} روزه)",
-            'status' => 'completed',
-            'related_id' => $subscription->id // ذخیره آیدی اشتراک
-        ]);
-    
-        // نمایش تاریخ شمسی
-        $jdate = \Morilog\Jalali\Jalalian::fromDateTime($expiryDate);
-    
-        $message = "🎉 **خرید اشتراک با موفقیت انجام شد!**\n\n";
-        $message .= "💎 اشتراک: {$plan->name}\n";
-        $message .= "💰 مبلغ کسر شده: " . number_format($plan->price) . " تومان\n";
-        $message .= "📊 موجودی جدید کیف پول: " . number_format($wallet->balance) . " تومان\n";
-        $message .= "⏳ اعتبار تا: " . $jdate->format('Y/m/d') . "\n\n";
-        $message .= "✅ اشتراک شما فعال شد و می‌توانید از امکانات ویژه استفاده کنید.";
-        
-    } elseif ($buttonText === '❌ خیر، انصراف') {
-        $message = "خرید اشتراک لغو شد.";
-    } else {
-        $message = "❌ دستور نامعتبر است.";
+
+        // استخراج plan_id از state
+        $planId = (int) str_replace('confirming_subscription:', '', $user->state);
+        $plan = \App\Models\SubscriptionPlan::find($planId);
+
+        if (!$plan) {
+            $this->telegram->sendMessage($chatId, "❌ پلن انتخابی یافت نشد.");
+            $this->showMainMenu($user, $chatId);
+            return;
+        }
+
+        if ($buttonText === '✅ بله، خرید می‌کنم') {
+            $wallet = $user->getWallet();
+
+            // بررسی مجدد موجودی
+            if ($wallet->balance < $plan->price) {
+                $this->telegram->sendMessage($chatId, "❌ موجودی کیف پول شما کافی نیست!");
+                $this->handleWallet($user, $chatId);
+                return;
+            }
+
+            // کسر از کیف پول
+            $wallet->decrement('balance', $plan->price);
+
+            // غیرفعال کردن اشتراک قبلی (اگر وجود دارد)
+            \App\Models\UserSubscription::where('user_id', $user->id)
+                ->where('status', 'active')
+                ->update(['status' => 'expired']);
+
+            // ایجاد اشتراک جدید
+            $expiryDate = \Carbon\Carbon::now()->addDays($plan->duration_days);
+
+            $subscription = \App\Models\UserSubscription::create([
+                'user_id' => $user->id,
+                'plan_id' => $plan->id,
+                'start_date' => \Carbon\Carbon::now(),
+                'expiry_date' => $expiryDate,
+                'status' => 'active',
+                'remaining_daily_contacts' => $plan->max_daily_contacts,
+                'remaining_total_contacts' => $plan->total_contacts,
+                'remaining_daily_suggestions' => $plan->max_daily_suggestions,
+                'remaining_total_suggestions' => $plan->total_suggestions,
+                'last_reset_date' => \Carbon\Carbon::now()
+            ]);
+
+            // ✅ **ثبت تراکنش خرید اشتراک**
+            \App\Models\Transaction::create([
+                'user_id' => $user->id,
+                'type' => 'subscription_purchase', // نوع جدید
+                'amount' => -$plan->price, // منفی چون کسر می‌شود
+                'description' => "خرید اشتراک {$plan->name} ({$plan->duration_days} روزه)",
+                'status' => 'completed',
+                'related_id' => $subscription->id // ذخیره آیدی اشتراک
+            ]);
+            //    // 🔴 **به‌روزرسانی وضعیت درخواست‌های منتظر اشتراک**
+            //     $this->updateContactRequestsAfterSubscription($user->id);
+
+            //     // 🔴 **اطلاع‌رسانی به کاربران منتظر**
+            //     $this->notifyWaitingUsers($user->id);
+
+
+            // نمایش تاریخ شمسی
+            $jdate = \Morilog\Jalali\Jalalian::fromDateTime($expiryDate);
+
+            $message = "🎉 **خرید اشتراک با موفقیت انجام شد!**\n\n";
+            $message .= "💎 اشتراک: {$plan->name}\n";
+            $message .= "💰 مبلغ کسر شده: " . number_format($plan->price) . " تومان\n";
+            $message .= "📊 موجودی جدید کیف پول: " . number_format($wallet->balance) . " تومان\n";
+            $message .= "⏳ اعتبار تا: " . $jdate->format('Y/m/d') . "\n\n";
+            $message .= "✅ اشتراک شما فعال شد و می‌توانید از امکانات ویژه استفاده کنید.";
+        } elseif ($buttonText === '❌ خیر، انصراف') {
+            $message = "خرید اشتراک لغو شد.";
+        } else {
+            $message = "❌ دستور نامعتبر است.";
+        }
+
+
+        // بازگشت به منوی اصلی
+        $user->update(['state' => 'main_menu']);
+        $this->showMainMenu($user, $chatId);
+        $this->telegram->sendMessage($chatId, $message);
     }
-    
-    // بازگشت به منوی اصلی
-    $user->update(['state' => 'main_menu']);
-    $this->showMainMenu($user, $chatId);
-    $this->telegram->sendMessage($chatId, $message);
-}
- private function showMySubscription($user, $chatId)
-{
-    $subscription = $user->getActiveSubscription();
-    
-    if (!$subscription) {
-        $message = "📋 **وضعیت اشتراک شما:**\n\n";
-        $message .= "🔴 شما هیچ اشتراک فعالی ندارید.\n\n";
-        $message .= "💡 با خرید اشتراک می‌توانید از امکانات زیر استفاده کنید:\n";
-        $message .= "• مشاهده اطلاعات تماس کاربران\n";
-        $message .= "• دریافت پیشنهادات بیشتر\n";
-        $message .= "• استفاده نامحدود از ربات\n\n";
-        $message .= "برای مشاهده پلن‌های اشتراک روی دکمه زیر کلیک کنید:";
-        
-        $keyboard = [
-            'keyboard' => [
-                [['text' => '💎 مشاهده پلن‌ها']],
-                [['text' => '💼 کیف پول']],
-                [['text' => '🔙 منوی اصلی']]
-            ],
-            'resize_keyboard' => true
-        ];
-    } else {
-        $plan = $subscription->plan;
-        $stats = $subscription->getUsageStats();
-        
-        // تبدیل تاریخ به شمسی با Morilog/Jalali
-        $expiryDateFormatted = 'نامشخص';
-        if ($subscription->expiry_date) {
+
+    /**
+     * به‌روزرسانی وضعیت درخواست‌های منتظر اشتراک
+     */
+    private function updateContactRequestsAfterSubscription($userId)
+    {
+        // پیدا کردن همه درخواست‌هایی که برای این کاربر هستند و منتظر اشتراک هستند
+        $updatedCount = \App\Models\ContactRequest::where('requested_id', $userId)
+            ->where('status', 'waiting_for_subscription')
+            ->update([
+                'status' => 'pending',
+                'updated_at' => now()
+            ]);
+
+        if ($updatedCount > 0) {
+            error_log("✅ Updated {$updatedCount} contact requests from 'waiting_for_subscription' to 'pending' for user {$userId}");
+        }
+
+        return $updatedCount;
+    }
+
+    /**
+     * دریافت تعداد درخواست‌های به‌روزرسانی شده
+     */
+    private function getUpdatedRequestsCount($userId)
+    {
+        return \App\Models\ContactRequest::where('requested_id', $userId)
+            ->where('status', 'pending')
+            ->where('updated_at', '>=', Carbon::now()->subMinutes(5)) // درخواست‌هایی که اخیراً به‌روز شده‌اند
+            ->count();
+    }
+
+    /**
+     * اطلاع‌رسانی به کاربران منتظر
+     */
+    private function notifyWaitingUsers($userId)
+    {
+        // پیدا کردن کاربرانی که برای این کاربر درخواست داده‌اند و اکنون وضعیتشان pending است
+        $waitingRequests = \App\Models\ContactRequest::with('requester')
+            ->where('requested_id', $userId)
+            ->where('status', 'pending')
+            ->where('notification_sent', false)
+            ->get();
+
+        foreach ($waitingRequests as $request) {
             try {
-                // استفاده از Jalalian
-                $jdate = Jalalian::fromDateTime($subscription->expiry_date);
-                $expiryDateFormatted = $jdate->format('Y/m/d');
+                // ارسال پیام به کاربر درخواست‌دهنده
+                $message = "🎉 **خبر خوب!**\n\n";
+                $message .= "کاربر **{$request->requested->first_name}** اشتراک فعال کرده است.\n";
+                $message .= "درخواست تماس شما اکنون در انتظار تأیید است.\n\n";
+                $message .= "⏳ به محض تأیید، اطلاعات تماس برای شما ارسال خواهد شد.";
+
+                $this->telegram->sendMessage($request->requester->telegram_id, $message);
+
+                // علامت‌گذاری که اطلاع ارسال شده
+                $request->update(['notification_sent' => true]);
+
+                error_log("📨 Sent subscription activation notification to user {$request->requester->id}");
             } catch (\Exception $e) {
-                // در صورت خطا، تاریخ میلادی نمایش داده شود
-                error_log("Jalalian conversion error: " . $e->getMessage());
-                if ($subscription->expiry_date instanceof \Carbon\Carbon) {
-                    $expiryDateFormatted = $subscription->expiry_date->format('Y/m/d');
-                } else {
-                    $expiryDateFormatted = date('Y/m/d', strtotime($subscription->expiry_date));
-                }
+                error_log("❌ Failed to send notification to user {$request->requester->id}: " . $e->getMessage());
             }
         }
-        
-        $message = "📋 **وضعیت اشتراک شما:**\n\n";
-        $message .= "✅ اشتراک فعال: **" . ($plan->name ?? 'نامشخص') . "**\n";
-        $message .= "⏳ روزهای باقی‌مانده: " . $subscription->daysRemaining() . " روز\n";
-        $message .= "📅 اعتبار تا: " . $expiryDateFormatted . "\n\n";
-        
-        $message .= "📊 **سهمیه‌های مصرفی:**\n\n";
-        
-        $message .= "📞 **درخواست تماس:**\n";
-        $message .= "   امروز: {$stats['daily_contacts']['used']}/{$stats['daily_contacts']['total']}\n";
-        $message .= "   کل: {$stats['total_contacts']['used']}/{$stats['total_contacts']['total']}\n\n";
-        
-        $message .= "👥 **پیشنهادات:**\n";
-        $message .= "   امروز: {$stats['daily_suggestions']['used']}/{$stats['daily_suggestions']['total']}\n";
-        $message .= "   کل: {$stats['total_suggestions']['used']}/{$stats['total_suggestions']['total']}\n";
-        
+    }
+    private function showMySubscription($user, $chatId)
+    {
+        $subscription = $user->getActiveSubscription();
+
+        if (!$subscription) {
+            $message = "📋 **وضعیت اشتراک شما:**\n\n";
+            $message .= "🔴 شما هیچ اشتراک فعالی ندارید.\n\n";
+            $message .= "💡 با خرید اشتراک می‌توانید از امکانات زیر استفاده کنید:\n";
+            $message .= "• مشاهده اطلاعات تماس کاربران\n";
+            $message .= "• دریافت پیشنهادات بیشتر\n";
+            $message .= "• استفاده نامحدود از ربات\n\n";
+            $message .= "برای مشاهده پلن‌های اشتراک روی دکمه زیر کلیک کنید:";
+
+            $keyboard = [
+                'keyboard' => [
+                    [['text' => '💎 مشاهده پلن‌ها']],
+                    [['text' => '💼 کیف پول']],
+                    [['text' => '🔙 منوی اصلی']]
+                ],
+                'resize_keyboard' => true
+            ];
+        } else {
+            $plan = $subscription->plan;
+            $stats = $subscription->getUsageStats();
+
+            // تبدیل تاریخ به شمسی با Morilog/Jalali
+            $expiryDateFormatted = 'نامشخص';
+            if ($subscription->expiry_date) {
+                try {
+                    // استفاده از Jalalian
+                    $jdate = Jalalian::fromDateTime($subscription->expiry_date);
+                    $expiryDateFormatted = $jdate->format('Y/m/d');
+                } catch (\Exception $e) {
+                    // در صورت خطا، تاریخ میلادی نمایش داده شود
+                    error_log("Jalalian conversion error: " . $e->getMessage());
+                    if ($subscription->expiry_date instanceof \Carbon\Carbon) {
+                        $expiryDateFormatted = $subscription->expiry_date->format('Y/m/d');
+                    } else {
+                        $expiryDateFormatted = date('Y/m/d', strtotime($subscription->expiry_date));
+                    }
+                }
+            }
+
+            $message = "📋 **وضعیت اشتراک شما:**\n\n";
+            $message .= "✅ اشتراک فعال: **" . ($plan->name ?? 'نامشخص') . "**\n";
+            $message .= "⏳ روزهای باقی‌مانده: " . $subscription->daysRemaining() . " روز\n";
+            $message .= "📅 اعتبار تا: " . $expiryDateFormatted . "\n\n";
+
+            $message .= "📊 **سهمیه‌های مصرفی:**\n\n";
+
+            $message .= "📞 **درخواست تماس:**\n";
+            $message .= "   امروز: {$stats['daily_contacts']['used']}/{$stats['daily_contacts']['total']}\n";
+            $message .= "   کل: {$stats['total_contacts']['used']}/{$stats['total_contacts']['total']}\n\n";
+
+            $message .= "👥 **پیشنهادات:**\n";
+            $message .= "   امروز: {$stats['daily_suggestions']['used']}/{$stats['daily_suggestions']['total']}\n";
+            $message .= "   کل: {$stats['total_suggestions']['used']}/{$stats['total_suggestions']['total']}\n";
+
+            $keyboard = [
+                'keyboard' => [
+                    [['text' => '🔄 تمدید اشتراک']],
+                    [['text' => '🔙 منوی اصلی']]
+                ],
+                'resize_keyboard' => true
+            ];
+        }
+
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+    }
+    // مشاهده پروفایل درخواست‌کننده
+    private function showRequesterProfileForRequest($user, $chatId, $requesterId, $requestId)
+    {
+        $requester = \App\Models\User::find($requesterId);
+        if (!$requester) {
+            $this->telegram->sendMessage($chatId, "❌ کاربر یافت نشد.");
+            return;
+        }
+
+        $contactRequest = \App\Models\ContactRequest::find($requestId);
+        if (!$contactRequest || $contactRequest->requested_id != $user->id) {
+            $this->telegram->sendMessage($chatId, "❌ درخواست نامعتبر است.");
+            return;
+        }
+
+        // علامت‌گذاری که کاربر پروفایل را دیده
+        $contactRequest->update(['requested_viewed_requester_profile' => true]);
+
+        // نمایش پروفایل کاربر
+        $message = "👤 **پروفایل کاربر درخواست‌کننده**\n\n";
+        $message .= "📝 نام: " . $requester->first_name . "\n";
+
+        if ($requester->age) {
+            $message .= "🎂 سن: " . $requester->age . " سال\n";
+        }
+
+        if ($requester->city) {
+            $message .= "📍 شهر: " . $requester->city . "\n";
+        }
+
+        if ($requester->gender) {
+            $genderText = $requester->gender == 'male' ? 'آقا' : 'خانم';
+            $message .= "👫 جنسیت: " . $genderText . "\n";
+        }
+
+        if ($requester->bio) {
+            $message .= "\n📖 درباره من:\n" . $requester->bio . "\n";
+        }
+
+        $message .= "\n────────────────\n";
+        $message .= "🔍 آیا مایلید اطلاعات تماس خود را با این کاربر به اشتراک بگذارید؟";
+
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => '✅ بله، تأیید می‌کنم', 'callback_data' => 'approve_contact:' . $requestId],
+                    ['text' => '❌ خیر، رد می‌کنم', 'callback_data' => 'reject_contact:' . $requestId]
+                ],
+                [
+                    ['text' => '🔙 بازگشت', 'callback_data' => 'back_to_request:' . $requestId]
+                ]
+            ]
+        ];
+
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+    }
+
+    // تأیید درخواست
+    private function approveContactRequest($user, $chatId, $requestId, $messageId = null)
+    {
+        $request = \App\Models\ContactRequest::find($requestId);
+
+        if (!$request || $request->requested_id != $user->id) {
+            $this->telegram->sendMessage($chatId, "❌ درخواست مورد نظر یافت نشد.");
+            return;
+        }
+
+        if ($request->status != 'pending') {
+            $this->telegram->sendMessage($chatId, "❌ این درخواست قبلاً پردازش شده است.");
+            return;
+        }
+
+        // به‌روزرسانی وضعیت
+        $request->update(['status' => 'approved', 'responded_at' => now()]);
+
+        // ارسال اطلاعات تماس به کاربر درخواست‌دهنده
+        $requester = \App\Models\User::find($request->requester_id);
+        if ($requester) {
+            $contactMessage = "✅ درخواست تماس شما توسط {$user->first_name_display} تأیید شد!\n\n";
+            $contactMessage .= "📞 اطلاعات تماس:\n";
+            $contactMessage .= "• نام: {$user->first_name_display}\n";
+            if ($user->phone) {
+                $contactMessage .= "• تلفن: {$user->phone}\n";
+            }
+            if ($user->telegram_username) {
+                $contactMessage .= "• تلگرام: @{$user->telegram_username}\n";
+            }
+
+            // 🔴 **اضافه کردن دکمه مشاهده اطلاعات کامل**
+            $inlineKeyboard = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => '👁️ مشاهده اطلاعات کامل', 'callback_data' => "view_contact_info:{$user->id}:{$request->id}"]
+                    ],
+                    [
+                        ['text' => '📝 ارسال پیام', 'url' => "https://t.me/{$user->telegram_username}"]
+                    ]
+                ]
+            ];
+
+            // اگر کاربر تلگرام یوزرنیم ندارد، دکمه ارسال پیام را حذف کنیم
+            if (!$user->telegram_username) {
+                $inlineKeyboard['inline_keyboard'][1] = [
+                    ['text' => '📋 تاریخچه تماس‌ها', 'callback_data' => 'contact_history']
+                ];
+            }
+
+            $this->telegram->sendMessage($requester->telegram_id, $contactMessage, $inlineKeyboard);
+        }
+
+        $this->telegram->sendMessage($chatId, "✅ درخواست تماس با موفقیت تأیید شد.");
+
+        // نمایش درخواست بعدی اگر وجود دارد
+        $nextRequest = \App\Models\ContactRequest::where('requested_id', $user->id)
+            ->whereIn('status', ['pending', 'waiting_for_subscription'])
+            ->where('id', '>', $requestId)
+            ->orderBy('id', 'ASC')
+            ->first();
+
+        if ($nextRequest) {
+            sleep(1); // تاخیر کوچک
+            $this->showIncomingRequestDetail($user, $chatId, $nextRequest->id);
+        } else {
+            sleep(1);
+            $this->showIncomingRequestsList($user, $chatId, 1);
+        }
+    }
+
+    // رد درخواست
+    private function rejectContactRequest($user, $chatId, $requestId)
+    {
+        $contactRequest = \App\Models\ContactRequest::find($requestId);
+
+        if (!$contactRequest || $contactRequest->requested_id != $user->id) {
+            $this->telegram->sendMessage($chatId, "❌ درخواست نامعتبر است.");
+            return;
+        }
+
+        if (!$contactRequest->isPending()) {
+            $this->telegram->sendMessage($chatId, "❌ این درخواست قبلاً پردازش شده است.");
+            return;
+        }
+
+        $contactRequest->update(['status' => 'rejected']);
+
+        // اطلاع به درخواست‌کننده
+        $requester = $contactRequest->requester;
+        $message = "❌ درخواست شما رد شد\n\n";
+        $message .= "👤 کاربر: " . $user->first_name . "\n";
+        $message .= "📝 کاربر درخواست شما برای مشاهده اطلاعات تماس را رد کرد.";
+
+        $this->telegram->sendMessage($requester->telegram_id, $message);
+
+        // پیام به کاربر ردکننده
+        $this->telegram->sendMessage($chatId, "✅ درخواست رد شد. هیچ سهمیه‌ای از شما کسر نشد.");
+    }
+
+    // ارسال اطلاعات تماس
+    private function sendContactInfoToRequester($requester, $requestedUser)
+    {
+        $message = "🎉 درخواست شما تأیید شد!\n\n";
+        $message .= "👤 **اطلاعات تماس کاربر:**\n";
+        $message .= "📝 نام: " . $requestedUser->first_name . "\n";
+
+        if ($requestedUser->mobile) {
+            $message .= "📱 شماره موبایل: " . $requestedUser->mobile . "\n";
+        }
+
+        if ($requestedUser->telegram_id) {
+            $telegramUsername = $requestedUser->username ?? 'ندارد';
+            $message .= "🔗 آیدی تلگرام: @" . $telegramUsername . "\n";
+            if ($telegramUsername !== 'ندارد') {
+                $message .= "📲 لینک مستقیم: https://t.me/" . $telegramUsername . "\n";
+            }
+        }
+
+        if ($requestedUser->city) {
+            $message .= "📍 شهر: " . $requestedUser->city . "\n";
+        }
+
+        $message .= "\n💡 می‌توانید از طریق دکمه زیر مستقیماً پیام دهید:";
+
+        // ایجاد کیبورد
+        $keyboardButtons = [];
+
+        // فقط اگر username دارد دکمه ارسال پیام نمایش داده شود
+        if (!empty($requestedUser->username)) {
+            $keyboardButtons[] = [
+                ['text' => '📝 ارسال پیام به کاربر', 'url' => 'https://t.me/' . $requestedUser->username]
+            ];
+        }
+
+        $keyboardButtons[] = [
+            ['text' => '💾 ذخیره اطلاعات', 'callback_data' => 'save_contact:' . $requestedUser->id],
+            ['text' => '📋 تاریخچه تماس‌ها', 'callback_data' => 'contact_history']
+        ];
+
+        $keyboard = [
+            'inline_keyboard' => $keyboardButtons
+        ];
+
+        $this->telegram->sendMessage($requester->telegram_id, $message, $keyboard);
+
+        // ✅ ذخیره در تاریخچه با استفاده از متد استاتیک addToHistory
+        // این همان روشی است که قبلاً استفاده می‌کردید
+        ContactRequestHistory::addToHistory($requester->id, $requestedUser->id, 0);
+    }
+    private function showMyContactRequests($user, $chatId)
+    {
+        $counts = $this->getContactRequestCounts($user->id);
+
+        $message = "📋 **مدیریت درخواست‌های تماس**\n\n";
+
+        // آمار کلی
+        $message .= "📊 **آمار:**\n";
+        $message .= "• درخواست‌های ورودی در انتظار: {$counts['incoming_pending']}\n";
+        $message .= "• درخواست‌های ارسالی تأیید شده: {$counts['outgoing_approved']}\n\n";
+
+        $message .= "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:";
+
+        $incomingText = '📥 درخواست‌های ورودی';
+        if ($counts['incoming_pending'] > 0) {
+            $incomingText .= " ({$counts['incoming_pending']})";
+        }
+
+        $outgoingText = '📤 درخواست‌های ارسالی';
+        if ($counts['outgoing_approved'] > 0) {
+            $outgoingText .= " ({$counts['outgoing_approved']})";
+        }
+
         $keyboard = [
             'keyboard' => [
-                [['text' => '🔄 تمدید اشتراک']],
+                [['text' => $incomingText]],
+                [['text' => $outgoingText]],
                 [['text' => '🔙 منوی اصلی']]
             ],
             'resize_keyboard' => true
         ];
-    }
-    
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
-// مشاهده پروفایل درخواست‌کننده
-private function showRequesterProfileForRequest($user, $chatId, $requesterId, $requestId)
-{
-    $requester = \App\Models\User::find($requesterId);
-    if (!$requester) {
-        $this->telegram->sendMessage($chatId, "❌ کاربر یافت نشد.");
-        return;
-    }
-    
-    $contactRequest = \App\Models\ContactRequest::find($requestId);
-    if (!$contactRequest || $contactRequest->requested_id != $user->id) {
-        $this->telegram->sendMessage($chatId, "❌ درخواست نامعتبر است.");
-        return;
-    }
-    
-    // علامت‌گذاری که کاربر پروفایل را دیده
-    $contactRequest->update(['requested_viewed_requester_profile' => true]);
-    
-    // نمایش پروفایل کاربر
-    $message = "👤 **پروفایل کاربر درخواست‌کننده**\n\n";
-    $message .= "📝 نام: " . $requester->first_name . "\n";
-    
-    if ($requester->age) {
-        $message .= "🎂 سن: " . $requester->age . " سال\n";
-    }
-    
-    if ($requester->city) {
-        $message .= "📍 شهر: " . $requester->city . "\n";
-    }
-    
-    if ($requester->gender) {
-        $genderText = $requester->gender == 'male' ? 'آقا' : 'خانم';
-        $message .= "👫 جنسیت: " . $genderText . "\n";
-    }
-    
-    if ($requester->bio) {
-        $message .= "\n📖 درباره من:\n" . $requester->bio . "\n";
-    }
-    
-    $message .= "\n────────────────\n";
-    $message .= "🔍 آیا مایلید اطلاعات تماس خود را با این کاربر به اشتراک بگذارید؟";
-    
-    $keyboard = [
-        'inline_keyboard' => [
-            [
-                ['text' => '✅ بله، تأیید می‌کنم', 'callback_data' => 'approve_contact:' . $requestId],
-                ['text' => '❌ خیر، رد می‌کنم', 'callback_data' => 'reject_contact:' . $requestId]
-            ],
-            [
-                ['text' => '🔙 بازگشت', 'callback_data' => 'back_to_request:' . $requestId]
-            ]
-        ]
-    ];
-    
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
 
-// تأیید درخواست
-private function approveContactRequest($user, $chatId, $requestId)
-{
-    $contactRequest = \App\Models\ContactRequest::find($requestId);
-    
-    if (!$contactRequest || $contactRequest->requested_id != $user->id) {
-        $this->telegram->sendMessage($chatId, "❌ درخواست نامعتبر است.");
-        return;
+        $this->telegram->sendMessage($chatId, $message, $keyboard);
+        $user->update(['state' => 'contact_requests_menu']);
     }
-    
-    if (!$contactRequest->isPending()) {
-        $this->telegram->sendMessage($chatId, "❌ این درخواست قبلاً پردازش شده است.");
-        return;
-    }
-    
-    // بررسی اشتراک کاربر
-    if (!$user->hasActiveSubscription()) {
-        $this->telegram->sendMessage($chatId, "❌ شما اشتراک فعال ندارید!");
-        return;
-    }
-    
-    $subscription = $user->getActiveSubscription();
-    
-    // بررسی سهمیه
-    if (!$subscription->canRequestContact()) {
-        $this->telegram->sendMessage($chatId, "❌ سهمیه درخواست تماس شما تمام شده است.");
-        return;
-    }
-    
-    // استفاده از سهمیه کاربر تأییدکننده
-    if (!$subscription->useContactRequest()) {
-        $this->telegram->sendMessage($chatId, "❌ خطا در استفاده از سهمیه.");
-        return;
-    }
-    
-    // به‌روزرسانی وضعیت درخواست
-    $contactRequest->update(['status' => 'approved']);
-    
-    // ✅ ارسال اطلاعات تماس به درخواست‌کننده
-    $this->sendContactInfoToRequester($contactRequest->requester, $user);
-    
-    // ارسال تأیید به کاربر تأییدکننده
-    $message = "✅ درخواست تأیید شد!\n\n";
-    $message .= "👤 اطلاعات تماس شما برای کاربر ارسال شد.\n";
-    $message .= "📞 یک درخواست از سهمیه شما کسر شد.\n\n";
-    $message .= "💰 سهمیه باقی‌مانده:\n";
-    
-    // تازه‌سازی subscription برای گرفتن مقادیر به‌روز
-    $subscription->refresh();
-    
-    $message .= "• امروز: " . $subscription->remaining_daily_contacts . "/" . ($subscription->plan->max_daily_contacts ?? 'نامشخص') . "\n";
-    $message .= "• کل: " . $subscription->remaining_total_contacts . "/" . ($subscription->plan->total_contacts ?? 'نامشخص');
-    
-    $this->telegram->sendMessage($chatId, $message);
-    
-    // ❌ این خط را حذف کنید چون در sendContactInfoToRequester ذخیره می‌شود
-    // ContactRequestHistory::addToHistory($contactRequest->requester_id, $user->id, 0);
-}
+    private function hasApprovedContactRequest($requesterId, $requestedId)
+    {
+        // بررسی در جدول contact_requests
+        $approvedRequest = \App\Models\ContactRequest::where('requester_id', $requesterId)
+            ->where('requested_id', $requestedId)
+            ->where('status', 'approved')
+            ->first();
 
-// رد درخواست
-private function rejectContactRequest($user, $chatId, $requestId)
-{
-    $contactRequest = \App\Models\ContactRequest::find($requestId);
-    
-    if (!$contactRequest || $contactRequest->requested_id != $user->id) {
-        $this->telegram->sendMessage($chatId, "❌ درخواست نامعتبر است.");
-        return;
-    }
-    
-    if (!$contactRequest->isPending()) {
-        $this->telegram->sendMessage($chatId, "❌ این درخواست قبلاً پردازش شده است.");
-        return;
-    }
-    
-    $contactRequest->update(['status' => 'rejected']);
-    
-    // اطلاع به درخواست‌کننده
-    $requester = $contactRequest->requester;
-    $message = "❌ درخواست شما رد شد\n\n";
-    $message .= "👤 کاربر: " . $user->first_name . "\n";
-    $message .= "📝 کاربر درخواست شما برای مشاهده اطلاعات تماس را رد کرد.";
-    
-    $this->telegram->sendMessage($requester->telegram_id, $message);
-    
-    // پیام به کاربر ردکننده
-    $this->telegram->sendMessage($chatId, "✅ درخواست رد شد. هیچ سهمیه‌ای از شما کسر نشد.");
-}
+        if ($approvedRequest) {
+            return true;
+        }
 
-// ارسال اطلاعات تماس
-private function sendContactInfoToRequester($requester, $requestedUser)
-{
-    $message = "🎉 درخواست شما تأیید شد!\n\n";
-    $message .= "👤 **اطلاعات تماس کاربر:**\n";
-    $message .= "📝 نام: " . $requestedUser->first_name . "\n";
-    
-    if ($requestedUser->mobile) {
-        $message .= "📱 شماره موبایل: " . $requestedUser->mobile . "\n";
+        // همچنین بررسی در تاریخچه قدیمی (اگر می‌خواهید با سیستم قدیمی هم سازگار باشد)
+        if (method_exists('ContactRequestHistory', 'hasRequestedBefore')) {
+            return ContactRequestHistory::hasRequestedBefore($requesterId, $requestedId);
+        }
+
+        return false;
     }
-    
-    if ($requestedUser->telegram_id) {
-        $telegramUsername = $requestedUser->username ?? 'ندارد';
-        $message .= "🔗 آیدی تلگرام: @" . $telegramUsername . "\n";
-        if ($telegramUsername !== 'ندارد') {
-            $message .= "📲 لینک مستقیم: https://t.me/" . $telegramUsername . "\n";
+    private function createContactRequest($requester, $requestedUser, $chatId)
+    {
+        // بررسی اشتراک کاربر درخواست‌شونده
+        $requestedUserHasSubscription = $requestedUser->hasActiveSubscription();
+
+        if ($requestedUserHasSubscription) {
+            // ایجاد درخواست
+            $contactRequest = \App\Models\ContactRequest::create([
+                'requester_id' => $requester->id,
+                'requested_id' => $requestedUser->id,
+                'status' => 'pending'
+            ]);
+
+            // ارسال پیام به کاربر درخواست‌شونده
+            $this->sendContactRequestToRequestedUser($requestedUser, $requester, $contactRequest->id);
+
+            // پیام به درخواست‌کننده
+            $message = "✅ **درخواست شما ارسال شد!**\n\n";
+            $message .= "👤 کاربر: " . $requestedUser->first_name . "\n";
+            $message .= "💰 یک درخواست از سهمیه شما کسر شد.\n";
+            $message .= "⏳ منتظر تأیید کاربر باشید.\n\n";
+
+            // نمایش سهمیه باقی‌مانده
+            $subscription = $requester->getActiveSubscription();
+            $subscription->refresh(); // تازه‌سازی مقادیر
+
+            $message .= "📊 **سهمیه باقی‌مانده:**\n";
+            $message .= "• درخواست تماس روزانه: {$subscription->remaining_daily_contacts}/{$subscription->plan->max_daily_contacts}\n";
+            $message .= "• درخواست تماس کلی: {$subscription->remaining_total_contacts}/{$subscription->plan->total_contacts}";
+
+            $this->telegram->sendMessage($chatId, $message);
+        } else {
+            // کاربر اشتراک ندارد
+            $contactRequest = \App\Models\ContactRequest::create([
+                'requester_id' => $requester->id,
+                'requested_id' => $requestedUser->id,
+                'status' => 'waiting_for_subscription'
+            ]);
+
+            // پیام به درخواست‌کننده
+            $message = "⏳ **کاربر اشتراک فعال ندارد**\n\n";
+            $message .= "👤 کاربر: " . $requestedUser->first_name . "\n";
+            $message .= "💰 یک درخواست از سهمیه شما کسر شد.\n";
+            $message .= "❌ این کاربر در حال حاضر اشتراک فعال ندارد.\n\n";
+            $message .= "📩 به کاربر یک پیام ارسال شده و از او خواسته شده اشتراک تهیه کند.\n";
+            $message .= "⏰ درخواست شما ذخیره شده و منتظر می‌ماند تا کاربر اشتراک تهیه کند.\n\n";
+
+            // نمایش سهمیه باقی‌مانده
+            $subscription = $requester->getActiveSubscription();
+            $subscription->refresh();
+
+            $message .= "📊 **سهمیه باقی‌مانده:**\n";
+            $message .= "• درخواست تماس روزانه: {$subscription->remaining_daily_contacts}/{$subscription->plan->max_daily_contacts}\n";
+            $message .= "• درخواست تماس کلی: {$subscription->remaining_total_contacts}/{$subscription->plan->total_contacts}";
+
+            $this->telegram->sendMessage($chatId, $message);
+
+            // ارسال پیام به کاربر درخواست‌شونده (بدون اشتراک)
+            $this->sendSubscriptionRequiredNotification($requestedUser, $requester);
         }
     }
-    
-    if ($requestedUser->city) {
-        $message .= "📍 شهر: " . $requestedUser->city . "\n";
-    }
-    
-    $message .= "\n💡 می‌توانید از طریق دکمه زیر مستقیماً پیام دهید:";
-    
-    // ایجاد کیبورد
-    $keyboardButtons = [];
-    
-    // فقط اگر username دارد دکمه ارسال پیام نمایش داده شود
-    if (!empty($requestedUser->username)) {
-        $keyboardButtons[] = [
-            ['text' => '📝 ارسال پیام به کاربر', 'url' => 'https://t.me/' . $requestedUser->username]
+
+    private function getContactRequestCounts($userId)
+    {
+        return [
+            'incoming_pending' => \App\Models\ContactRequest::where('requested_id', $userId)
+                ->where('status', 'pending')
+                ->count(),
+            'outgoing_approved' => \App\Models\ContactRequest::where('requester_id', $userId)
+                ->where('status', 'approved')
+                ->count()
         ];
     }
-    
-    $keyboardButtons[] = [
-        ['text' => '💾 ذخیره اطلاعات', 'callback_data' => 'save_contact:' . $requestedUser->id],
-        ['text' => '📋 تاریخچه تماس‌ها', 'callback_data' => 'contact_history']
-    ];
-    
-    $keyboard = [
-        'inline_keyboard' => $keyboardButtons
-    ];
-    
-    $this->telegram->sendMessage($requester->telegram_id, $message, $keyboard);
-    
-    // ✅ ذخیره در تاریخچه با استفاده از متد استاتیک addToHistory
-    // این همان روشی است که قبلاً استفاده می‌کردید
-    ContactRequestHistory::addToHistory($requester->id, $requestedUser->id, 0);
-}
-private function showMyContactRequests($user, $chatId)
-{
-    $incomingRequests = \App\Models\ContactRequest::with('requester')
-        ->where('requested_id', $user->id)
-        ->whereIn('status', ['pending', 'waiting_for_subscription'])
-        ->orderBy('created_at', 'DESC')
-        ->get();
-    
-    $outgoingRequests = \App\Models\ContactRequest::with('requested')
-        ->where('requester_id', $user->id)
-        ->orderBy('created_at', 'DESC')
-        ->limit(10)
-        ->get();
-    
-    $message = "📋 **درخواست‌های تماس من**\n\n";
-    
-    if ($incomingRequests->count() > 0) {
-        $message .= "📥 **درخواست‌های ورودی:**\n";
-        foreach ($incomingRequests as $request) {
-            $statusEmoji = $request->status == 'pending' ? '⏳' : '💤';
-            $statusText = $request->status == 'pending' ? 'در انتظار' : 'منتظر اشتراک';
-            
-            $message .= "{$statusEmoji} {$request->requester->first_name} - {$statusText}\n";
+    private function showIncomingRequestsList($user, $chatId, $page = 1)
+    {
+        $perPage = 5;
+        $offset = ($page - 1) * $perPage;
+
+        // گرفتن درخواست‌های ورودی
+        $requests = \App\Models\ContactRequest::with('requester')
+            ->where('requested_id', $user->id)
+            ->whereIn('status', ['pending', 'waiting_for_subscription'])
+            ->orderBy('created_at', 'DESC')
+            ->offset($offset)
+            ->limit($perPage)
+            ->get();
+
+        $total = \App\Models\ContactRequest::where('requested_id', $user->id)
+            ->whereIn('status', ['pending', 'waiting_for_subscription'])
+            ->count();
+
+        $totalPages = ceil($total / $perPage);
+
+        if ($requests->isEmpty()) {
+            $message = "📭 هیچ درخواست ورودی ندارید.";
+            $this->telegram->sendMessage($chatId, $message);
+            $this->showMyContactRequests($user, $chatId);
+            return;
         }
-        $message .= "\n";
+
+        $message = "📥 **درخواست‌های ورودی شما**\n\n";
+        $message .= "📄 صفحه {$page} از {$totalPages}\n\n";
+
+        foreach ($requests as $index => $request) {
+            $position = $offset + $index + 1;
+            $statusEmoji = $request->status == 'pending' ? '⏳' : '💤';
+            $statusText = $request->status == 'pending' ? 'در انتظار تأیید' : 'منتظر اشتراک';
+
+            $message .= "{$position}. {$statusEmoji} **{$request->requester->first_name_display}**\n";
+            $message .= "   📝 وضعیت: {$statusText}\n";
+            $message .= "   🕒 زمان: " . $request->created_at->format('Y-m-d H:i') . "\n";
+            $message .= "   🔘 کد: `{$request->id}`\n\n";
+        }
+
+        // دکمه‌های صفحه‌بندی و انتخاب
+        $inlineKeyboard = ['inline_keyboard' => []];
+
+        // ردیف دکمه‌های انتخاب
+        foreach ($requests as $index => $request) {
+            $position = $offset + $index + 1;
+            $inlineKeyboard['inline_keyboard'][] = [
+                [
+                    'text' => "{$position}. مشاهده {$request->requester->first_name_display}",
+                    'callback_data' => "view_incoming:{$request->id}"
+                ]
+            ];
+        }
+
+        // ردیف دکمه‌های صفحه‌بندی
+        $paginationButtons = [];
+        if ($page > 1) {
+            $paginationButtons[] = ['text' => '⏪ قبلی', 'callback_data' => "incoming_page:" . ($page - 1)];
+        }
+        $paginationButtons[] = ['text' => '🔙 بازگشت', 'callback_data' => 'back_to_requests_menu'];
+        if ($page < $totalPages) {
+            $paginationButtons[] = ['text' => 'بعدی ⏩', 'callback_data' => "incoming_page:" . ($page + 1)];
+        }
+
+        $inlineKeyboard['inline_keyboard'][] = $paginationButtons;
+
+        $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
+        $user->update(['state' => 'viewing_incoming_list:' . $page]);
     }
-    
-    if ($outgoingRequests->count() > 0) {
-        $message .= "📤 **درخواست‌های ارسالی:**\n";
-        foreach ($outgoingRequests as $request) {
-            $statusEmoji = match($request->status) {
+    private function showIncomingRequestDetail($user, $chatId, $requestId, $messageId = null)
+    {
+        $request = \App\Models\ContactRequest::with('requester')
+            ->where('id', $requestId)
+            ->where('requested_id', $user->id)
+            ->first();
+
+        if (!$request) {
+            $this->telegram->sendMessage($chatId, "❌ درخواست مورد نظر یافت نشد.");
+            return;
+        }
+
+        $requester = $request->requester;
+
+        // محاسبه سن از birth_date اگر age موجود نیست
+        $age = $requester->age;
+        if (!$age && $requester->birth_date) {
+            $age = Carbon::now()->diffInYears($requester->birth_date);
+        }
+
+        $message = "📋 **جزئیات درخواست تماس**\n\n";
+        $message .= "👤 **کاربر درخواست‌دهنده:**\n";
+        $message .= "• نام: {$requester->first_name_display}\n";
+        if ($age) {
+            $message .= "• سن: {$age} سال\n";
+        }
+        if ($requester->city) {
+            $message .= "• شهر: {$requester->city}\n";
+        }
+
+        $message .= "\n📝 **وضعیت درخواست:**\n";
+        $statusText = match ($request->status) {
+            'pending' => '⏳ در انتظار تأیید',
+            'waiting_for_subscription' => '💤 منتظر اشتراک کاربر',
+            default => $request->status
+        };
+        $message .= "• {$statusText}\n";
+        $message .= "• زمان ارسال: " . $request->created_at->format('Y-m-d H:i') . "\n";
+
+        // دکمه‌های عملیاتی
+        $inlineKeyboard = ['inline_keyboard' => []];
+
+        // ردیف اول: دکمه‌های تأیید/رد/پروفایل
+        $actionRow = [];
+
+        if ($request->status === 'pending') {
+            $actionRow[] = ['text' => '✅ تأیید', 'callback_data' => "approve_request:{$request->id}"];
+            $actionRow[] = ['text' => '❌ رد', 'callback_data' => "reject_request:{$request->id}"];
+        }
+
+        $actionRow[] = ['text' => '👤 مشاهده پروفایل', 'callback_data' => "view_profile:{$requester->id}"];
+        $inlineKeyboard['inline_keyboard'][] = $actionRow;
+
+        // ردیف دوم: دکمه‌های ناوبری
+        $navRow = [];
+
+        // پیدا کردن درخواست قبلی و بعدی
+        $prevRequest = \App\Models\ContactRequest::where('requested_id', $user->id)
+            ->whereIn('status', ['pending', 'waiting_for_subscription'])
+            ->where('id', '<', $request->id)
+            ->orderBy('id', 'DESC')
+            ->first();
+
+        $nextRequest = \App\Models\ContactRequest::where('requested_id', $user->id)
+            ->whereIn('status', ['pending', 'waiting_for_subscription'])
+            ->where('id', '>', $request->id)
+            ->orderBy('id', 'ASC')
+            ->first();
+
+        if ($prevRequest) {
+            $navRow[] = ['text' => '◀️ قبلی', 'callback_data' => "prev_incoming:{$request->id}"];
+        }
+
+        $navRow[] = ['text' => '📋 لیست', 'callback_data' => 'back_to_incoming_list'];
+
+        if ($nextRequest) {
+            $navRow[] = ['text' => 'بعدی ▶️', 'callback_data' => "next_incoming:{$request->id}"];
+        }
+
+        $inlineKeyboard['inline_keyboard'][] = $navRow;
+
+        // ردیف سوم: بازگشت
+        $inlineKeyboard['inline_keyboard'][] = [
+            ['text' => '🔙 منوی درخواست‌ها', 'callback_data' => 'back_to_requests_menu']
+        ];
+
+        if ($messageId) {
+            // حذف پیام قبلی و ارسال پیام جدید
+
+            $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
+        } else {
+            $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
+        }
+
+        $user->update(['state' => 'viewing_incoming_detail:' . $request->id]);
+    }
+    private function showNextIncomingRequest($user, $chatId, $currentRequestId, $messageId)
+    {
+        $nextRequest = \App\Models\ContactRequest::where('requested_id', $user->id)
+            ->whereIn('status', ['pending', 'waiting_for_subscription'])
+            ->where('id', '>', $currentRequestId)
+            ->orderBy('id', 'ASC')
+            ->first();
+
+        if ($nextRequest) {
+            $this->showIncomingRequestDetail($user, $chatId, $nextRequest->id, $messageId);
+        } else {
+            // رفتن به اولین درخواست
+            $firstRequest = \App\Models\ContactRequest::where('requested_id', $user->id)
+                ->whereIn('status', ['pending', 'waiting_for_subscription'])
+                ->orderBy('id', 'ASC')
+                ->first();
+
+            if ($firstRequest && $firstRequest->id != $currentRequestId) {
+                $this->showIncomingRequestDetail($user, $chatId, $firstRequest->id, $messageId);
+            } else {
+                $this->telegram->sendMessage($chatId, "⚠️ درخواست بعدی وجود ندارد.");
+            }
+        }
+    }
+
+    private function showPrevIncomingRequest($user, $chatId, $currentRequestId, $messageId)
+    {
+        $prevRequest = \App\Models\ContactRequest::where('requested_id', $user->id)
+            ->whereIn('status', ['pending', 'waiting_for_subscription'])
+            ->where('id', '<', $currentRequestId)
+            ->orderBy('id', 'DESC')
+            ->first();
+
+        if ($prevRequest) {
+            $this->showIncomingRequestDetail($user, $chatId, $prevRequest->id, $messageId);
+        } else {
+            // رفتن به آخرین درخواست
+            $lastRequest = \App\Models\ContactRequest::where('requested_id', $user->id)
+                ->whereIn('status', ['pending', 'waiting_for_subscription'])
+                ->orderBy('id', 'DESC')
+                ->first();
+
+            if ($lastRequest && $lastRequest->id != $currentRequestId) {
+                $this->showIncomingRequestDetail($user, $chatId, $lastRequest->id, $messageId);
+            } else {
+                $this->telegram->sendMessage($chatId, "⚠️ درخواست قبلی وجود ندارد.");
+            }
+        }
+    }
+    private function showOutgoingRequestsList($user, $chatId, $page = 1)
+    {
+        $perPage = 5;
+        $offset = ($page - 1) * $perPage;
+
+        // گرفتن درخواست‌های ارسالی
+        $requests = \App\Models\ContactRequest::with('requested')
+            ->where('requester_id', $user->id)
+            ->orderBy('created_at', 'DESC')
+            ->offset($offset)
+            ->limit($perPage)
+            ->get();
+
+        $total = \App\Models\ContactRequest::where('requester_id', $user->id)->count();
+        $totalPages = ceil($total / $perPage);
+
+        if ($requests->isEmpty()) {
+            $message = "📭 هیچ درخواست ارسالی ندارید.";
+            $this->telegram->sendMessage($chatId, $message);
+            $this->showMyContactRequests($user, $chatId);
+            return;
+        }
+
+        $message = "📤 **درخواست‌های ارسالی شما**\n\n";
+        $message .= "📄 صفحه {$page} از {$totalPages}\n\n";
+
+        foreach ($requests as $index => $request) {
+            $position = $offset + $index + 1;
+
+            $statusEmoji = match ($request->status) {
                 'pending' => '⏳',
                 'approved' => '✅',
                 'rejected' => '❌',
                 'waiting_for_subscription' => '💤',
                 default => '📝'
             };
-            
-            $statusText = match($request->status) {
+
+            $statusText = match ($request->status) {
                 'pending' => 'در انتظار',
                 'approved' => 'تأیید شده',
                 'rejected' => 'رد شده',
                 'waiting_for_subscription' => 'منتظر اشتراک',
                 default => $request->status
             };
-            
-            $message .= "{$statusEmoji} {$request->requested->first_name} - {$statusText}\n";
+
+            $message .= "{$position}. {$statusEmoji} **{$request->requested->first_name_display}**\n";
+            $message .= "   📝 وضعیت: {$statusText}\n";
+
+            if ($request->status === 'approved' && $request->responded_at) {
+                $message .= "   ✅ تأیید شده در: " . $request->responded_at->format('Y-m-d H:i') . "\n";
+            }
+
+            $message .= "   🕒 ارسال شده: " . $request->created_at->format('Y-m-d H:i') . "\n";
+            $message .= "   🔘 کد: `{$request->id}`\n\n";
         }
-    }
-    
-    if ($incomingRequests->count() == 0 && $outgoingRequests->count() == 0) {
-        $message .= "📭 هیچ درخواست تماسی ندارید.";
-    }
-    
-    $keyboard = [
-        'keyboard' => [
-            [['text' => '📥 درخواست‌های ورودی']],
-            [['text' => '📤 درخواست‌های ارسالی']],
-            [['text' => '🔙 منوی اصلی']]
-        ],
-        'resize_keyboard' => true
-    ];
-    
-    $this->telegram->sendMessage($chatId, $message, $keyboard);
-}
-private function hasApprovedContactRequest($requesterId, $requestedId)
-{
-    // بررسی در جدول contact_requests
-    $approvedRequest = \App\Models\ContactRequest::where('requester_id', $requesterId)
-        ->where('requested_id', $requestedId)
-        ->where('status', 'approved')
-        ->first();
-    
-    if ($approvedRequest) {
-        return true;
-    }
-    
-    // همچنین بررسی در تاریخچه قدیمی (اگر می‌خواهید با سیستم قدیمی هم سازگار باشد)
-    if (method_exists('ContactRequestHistory', 'hasRequestedBefore')) {
-        return ContactRequestHistory::hasRequestedBefore($requesterId, $requestedId);
-    }
-    
-    return false;
-}
-private function createContactRequest($requester, $requestedUser, $chatId)
-{
-    // بررسی اشتراک کاربر درخواست‌شونده
-    $requestedUserHasSubscription = $requestedUser->hasActiveSubscription();
-    
-    if ($requestedUserHasSubscription) {
-        // ایجاد درخواست
-        $contactRequest = \App\Models\ContactRequest::create([
-            'requester_id' => $requester->id,
-            'requested_id' => $requestedUser->id,
-            'status' => 'pending'
-        ]);
-        
-        // ارسال پیام به کاربر درخواست‌شونده
-        $this->sendContactRequestToRequestedUser($requestedUser, $requester, $contactRequest->id);
-        
-        // پیام به درخواست‌کننده
-        $message = "✅ **درخواست شما ارسال شد!**\n\n";
-        $message .= "👤 کاربر: " . $requestedUser->first_name . "\n";
-        $message .= "💰 یک درخواست از سهمیه شما کسر شد.\n";
-        $message .= "⏳ منتظر تأیید کاربر باشید.\n\n";
-        
-        // نمایش سهمیه باقی‌مانده
-        $subscription = $requester->getActiveSubscription();
-        $subscription->refresh(); // تازه‌سازی مقادیر
-        
-        $message .= "📊 **سهمیه باقی‌مانده:**\n";
-        $message .= "• درخواست تماس روزانه: {$subscription->remaining_daily_contacts}/{$subscription->plan->max_daily_contacts}\n";
-        $message .= "• درخواست تماس کلی: {$subscription->remaining_total_contacts}/{$subscription->plan->total_contacts}";
-        
-        $this->telegram->sendMessage($chatId, $message);
-        
-    } else {
-        // کاربر اشتراک ندارد
-        $contactRequest = \App\Models\ContactRequest::create([
-            'requester_id' => $requester->id,
-            'requested_id' => $requestedUser->id,
-            'status' => 'waiting_for_subscription'
-        ]);
-        
-        // پیام به درخواست‌کننده
-        $message = "⏳ **کاربر اشتراک فعال ندارد**\n\n";
-        $message .= "👤 کاربر: " . $requestedUser->first_name . "\n";
-        $message .= "💰 یک درخواست از سهمیه شما کسر شد.\n";
-        $message .= "❌ این کاربر در حال حاضر اشتراک فعال ندارد.\n\n";
-        $message .= "📩 به کاربر یک پیام ارسال شده و از او خواسته شده اشتراک تهیه کند.\n";
-        $message .= "⏰ درخواست شما ذخیره شده و منتظر می‌ماند تا کاربر اشتراک تهیه کند.\n\n";
-        
-        // نمایش سهمیه باقی‌مانده
-        $subscription = $requester->getActiveSubscription();
-        $subscription->refresh();
-        
-        $message .= "📊 **سهمیه باقی‌مانده:**\n";
-        $message .= "• درخواست تماس روزانه: {$subscription->remaining_daily_contacts}/{$subscription->plan->max_daily_contacts}\n";
-        $message .= "• درخواست تماس کلی: {$subscription->remaining_total_contacts}/{$subscription->plan->total_contacts}";
-        
-        $this->telegram->sendMessage($chatId, $message);
-        
-        // ارسال پیام به کاربر درخواست‌شونده (بدون اشتراک)
-        $this->sendSubscriptionRequiredNotification($requestedUser, $requester);
-    }
-}
 
+        // دکمه‌های صفحه‌بندی
+        $inlineKeyboard = ['inline_keyboard' => []];
 
+        // دکمه‌های انتخاب (برای درخواست‌های تأیید شده می‌توان اطلاعات تماس را نشان داد)
+        foreach ($requests as $index => $request) {
+            $position = $offset + $index + 1;
+
+            if ($request->status === 'approved') {
+                $inlineKeyboard['inline_keyboard'][] = [
+                    [
+                        'text' => "{$position}. مشاهده اطلاعات تماس {$request->requested->first_name_display}",
+                        'callback_data' => "view_contact_info:{$request->requested->id}:{$request->id}"
+                    ]
+                ];
+            }
+            // } else {
+            //     $inlineKeyboard['inline_keyboard'][] = [
+            //         [
+            //             'text' => "{$position}. مشاهده وضعیت {$request->requested->first_name_display}",
+            //             'callback_data' => "view_outgoing_status:{$request->id}"
+            //         ]
+            //     ];
+            // }
+        }
+
+        // ردیف دکمه‌های صفحه‌بندی
+        $paginationButtons = [];
+        if ($page > 1) {
+            $paginationButtons[] = ['text' => '⏪ قبلی', 'callback_data' => "outgoing_page:" . ($page - 1)];
+        }
+        $paginationButtons[] = ['text' => '🔙 بازگشت', 'callback_data' => 'back_to_requests_menu'];
+        if ($page < $totalPages) {
+            $paginationButtons[] = ['text' => 'بعدی ⏩', 'callback_data' => "outgoing_page:" . ($page + 1)];
+        }
+
+        $inlineKeyboard['inline_keyboard'][] = $paginationButtons;
+
+        $this->telegram->sendMessage($chatId, $message, $inlineKeyboard);
+        $user->update(['state' => 'viewing_outgoing_list:' . $page]);
+    }
 }

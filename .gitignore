@@ -28,3 +28,4 @@ storage/last_update_id.txt
 .idea/
 'debug.log'
 'update_debug.log'
+'delete_user_complete.php'
