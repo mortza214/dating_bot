@@ -35,12 +35,16 @@ class User extends Model
         'first_name_display',
         'health_status',
         'mobile',
+         'rules_accepted',
+         'referred_by',
+         'invite_code',
         'is_active' // 🔴 این فیلد را اضافه کردم
     ];
 
     protected $casts = [
         'is_profile_completed' => 'boolean',
-        'is_active' => 'boolean' // 🔴 این خط را اضافه کردم
+        'is_active' => 'boolean', // 🔴 این خط را اضافه کردم
+        'rules_accepted' => 'boolean' // ← این خط را اضافه کنید
     ];
 
     public function getWallet()
@@ -78,12 +82,11 @@ class User extends Model
     }
 
     // 🔴 **متد hasActiveSubscription - اصلاح شده**
-    public function hasActiveSubscription()
+   public function hasActiveSubscription()
 {
     $subscription = $this->getActiveSubscription();
     return $subscription && $subscription->isActive();
 }
-
     // 🔴 **متد getActiveSubscription - اصلاح شده (همین متد باعث خطا بود)**
   public function getActiveSubscription()
 {
@@ -125,27 +128,34 @@ class User extends Model
     {
         return $this->filters ? $this->filters->filters : [];
     }
-    
-    public function referrals()
-    {
-        return $this->hasMany(Referral::class, 'referrer_id');
+    // در مدل User
+public function refresh()
+{
+    if ($this->id) {
+        $fresh = self::find($this->id);
+        if ($fresh) {
+            $this->attributes = $fresh->attributes;
+            $this->original = $fresh->original;
+        }
     }
-
+    return $this;
+}
     public function referredBy()
     {
         return $this->belongsTo(User::class, 'referred_by');
     }
 
-    public function generateInviteCode()
-    {
-        do {
-            $code = strtoupper(substr(md5(uniqid(rand(), true)), 0, 8));
-        } while (self::where('invite_code', $code)->exists());
+    // در مدل User (app/Models/User.php)، متد generateInviteCode را بررسی کنید:
+public function generateInviteCode()
+{
+    do {
+        $code = strtoupper(substr(md5(uniqid(rand(), true)), 0, 8));
+    } while (self::where('invite_code', $code)->exists());
 
-        $this->update(['invite_code' => $code]);
-        return $code;
-    }
-
+    // به جای update از save استفاده کنید
+    $this->invite_code = $code;
+    return $this->save() ? $code : false;
+}
     public function getInviteLink()
     {
         if (!$this->invite_code) {
